@@ -124,10 +124,12 @@ export async function fillReport(
       continue;
     }
     if (joined.includes("慢性疾病風險評估") && !joined.includes("腎病識能") && !joined.includes("風險值")) {
+      const chronicVal = v(rowData, "counsel_chronic2") || v(rowData, "counsel_chronic");
+      const mark = chronicVal === "是" ? "■" : "□";
       const tNodes = Array.from(tr.getElementsByTagNameNS(NS, "t"));
       for (const t of tNodes) {
         if ((t.textContent ?? "").includes("慢性疾病風險評估")) {
-          t.textContent = "■慢性疾病風險評估";
+          t.textContent = `${mark}慢性疾病風險評估`;
         } else if ((t.textContent ?? "").trim() === "□") {
           t.textContent = "";
         }
