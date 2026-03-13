@@ -138,9 +138,13 @@ export function classifyLiver(
   const gp = toFloat(gpt) ?? 0;
   const mx = Math.max(g, gp);
   const hasHep = hbsag.trim() === "陽性" || hcv.trim() === "陽性";
+
+  // B/C 肝帶原者：無論肝指數高低，都建議進一步檢查
+  if (hasHep) return mx > 200 ? "severe" : "high";
+
   if (mx <= 40) return "normal";
   if (mx > 200) return "severe";
-  if (mx > 80 || hasHep) return "high";
+  if (mx > 80) return "high";
   return "mild";
 }
 
