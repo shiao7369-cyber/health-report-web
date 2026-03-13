@@ -1,0 +1,24 @@
+---
+import ReportApp from "../components/ReportApp.tsx";
+---
+
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>成人健檢報告產生程式</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; overflow: hidden; background: #1E2230; }
+      /* 捲軸美化 */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #1E2230; }
+      ::-webkit-scrollbar-thumb { background: #353D52; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #4C9BE8; }
+    </style>
+  </head>
+  <body>
+    <ReportApp client:load />
+  </body>
+</html>
