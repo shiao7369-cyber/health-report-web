@@ -84,6 +84,11 @@ function toFloat(s: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+/** 判斷值是否為「未測量/空白」 */
+function isEmpty(s: string): boolean {
+  return !s || s === "-" || s === "None" || s === "null";
+}
+
 // ── 判斷正常/異常邏輯 ────────────────────────────────────────────────────────
 
 export function classifyBP(sbp: string, dbp: string): "normal" | "elevated" | "stage1" | "stage2" {
@@ -228,8 +233,10 @@ export function buildCounselKidney(row: RowData): string {
 }
 
 // ── 檢查結果文字 ─────────────────────────────────────────────────────────────
-export function buildBpLine(row: RowData): string {
-  const grade = classifyBP(v(row, "sbp"), v(row, "dbp"));
+export function buildBpLine(row: RowData): string | null {
+  const sbp = v(row, "sbp"), dbp = v(row, "dbp");
+  if (isEmpty(sbp) && isEmpty(dbp)) return null; // 未測量，保留範本原樣
+  const grade = classifyBP(sbp, dbp);
   switch (grade) {
     case "normal":   return "血  壓：■正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
     case "elevated": return "血  壓：□正常■異常：建議■生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
@@ -238,8 +245,10 @@ export function buildBpLine(row: RowData): string {
   }
 }
 
-export function buildGlucoseLine(row: RowData): string {
-  const grade = classifyGlucose(v(row, "glucose"));
+export function buildGlucoseLine(row: RowData): string | null {
+  const glucose = v(row, "glucose");
+  if (isEmpty(glucose)) return null;
+  const grade = classifyGlucose(glucose);
   switch (grade) {
     case "normal":  return "飯前血糖：■正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
     case "prediab": return "飯前血糖：□正常■異常：建議■生活型態改善，並定期3~6個月追蹤□進一步檢查□接受治療";
@@ -248,8 +257,11 @@ export function buildGlucoseLine(row: RowData): string {
   }
 }
 
-export function buildLipidLine(row: RowData): string {
-  const grade = classifyLipid(v(row, "cholesterol"), v(row, "triglyceride"), v(row, "hdl"), v(row, "ldl"), v(row, "gender"));
+export function buildLipidLine(row: RowData): string | null {
+  const chol = v(row, "cholesterol"), tri = v(row, "triglyceride");
+  const hdl  = v(row, "hdl"),         ldl = v(row, "ldl");
+  if (isEmpty(chol) && isEmpty(tri) && isEmpty(hdl) && isEmpty(ldl)) return null;
+  const grade = classifyLipid(chol, tri, hdl, ldl, v(row, "gender"));
   switch (grade) {
     case "normal": return "血脂肪：■正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
     case "mild":   return "血脂肪：□正常■異常：建議■生活型態改善，並定期3~6個月追蹤□進一步檢查□接受治療";
@@ -257,10 +269,12 @@ export function buildLipidLine(row: RowData): string {
   }
 }
 
-export function buildKidneyLine(row: RowData): string {
+export function buildKidneyLine(row: RowData): string | null {
   const egfr         = v(row, "egfr");
   const urineProtein = v(row, "urine_protein");
   const stageRaw     = v(row, "kidney_stage");
+  // eGFR 空白且無蛋白尿 → 未測量
+  if (isEmpty(egfr) && !hasProteinuria(urineProtein)) return null;
 
   let stageLabel = "";
   const m = stageRaw.match(/第\s*([\w]+)\s*期/);
@@ -284,8 +298,12 @@ export function buildKidneyLine(row: RowData): string {
   }
 }
 
-export function buildLiverLine(row: RowData): string {
-  const grade = classifyLiver(v(row, "got"), v(row, "gpt"), v(row, "hbsag"), v(row, "hcv"));
+export function buildLiverLine(row: RowData): string | null {
+  const got = v(row, "got"), gpt = v(row, "gpt");
+  // GOT/GPT 都空白且無 B/C 肝帶原時，視為未測量
+  if (isEmpty(got) && isEmpty(gpt) &&
+      v(row, "hbsag") !== "陽性" && v(row, "hcv") !== "陽性") return null;
+  const grade = classifyLiver(got, gpt, v(row, "hbsag"), v(row, "hcv"));
   switch (grade) {
     case "normal": return "肝功能：■正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
     case "mild":   return "肝功能：□正常■異常：建議■生活型態改善，並定期3~6個月追蹤□進一步檢查□接受治療";
@@ -294,10 +312,14 @@ export function buildLiverLine(row: RowData): string {
   }
 }
 
-export function buildMetabolicLine(row: RowData): string {
+export function buildMetabolicLine(row: RowData): string | null {
+  // 五項指標全空白 → 未測量
+  const waist = v(row, "waist"), sbp = v(row, "sbp"), dbp = v(row, "dbp");
+  const glucose = v(row, "glucose"), tg = v(row, "triglyceride"), hdl = v(row, "hdl");
+  if (isEmpty(waist) && isEmpty(sbp) && isEmpty(dbp) &&
+      isEmpty(glucose) && isEmpty(tg) && isEmpty(hdl)) return null;
   const grade = classifyMetabolic(
-    v(row, "gender"), v(row, "waist"), v(row, "sbp"), v(row, "dbp"),
-    v(row, "glucose"), v(row, "triglyceride"), v(row, "hdl")
+    v(row, "gender"), waist, sbp, dbp, glucose, tg, hdl
   );
   switch (grade) {
     case "normal":   return "代謝症候群：■沒有□有：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";

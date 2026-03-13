@@ -51,8 +51,9 @@ function clearAndFill(paras: Element[], text: string, sz = "20") {
   p.appendChild(r);
 }
 
-/** 找到含 keyword 的儲存格，清空並填入新文字 */
-function replaceCellText(tr: Element, keyword: string, newText: string) {
+/** 找到含 keyword 的儲存格，清空並填入新文字；newText 為 null 時跳過（保留範本原樣） */
+function replaceCellText(tr: Element, keyword: string, newText: string | null) {
+  if (newText === null) return; // 未測量，保留範本原樣
   const tcs = Array.from(tr.getElementsByTagNameNS(NS, "tc"));
   for (const tc of tcs) {
     if (allText(tc).includes(keyword)) {
@@ -63,8 +64,9 @@ function replaceCellText(tr: Element, keyword: string, newText: string) {
   }
 }
 
-/** 找到含 keyword 的 w:t 節點，直接替換文字 */
-function fillTextNode(tr: Element, keyword: string, newText: string) {
+/** 找到含 keyword 的 w:t 節點，直接替換文字；newText 為 null 時跳過 */
+function fillTextNode(tr: Element, keyword: string, newText: string | null) {
+  if (newText === null) return;
   const tNodes = Array.from(tr.getElementsByTagNameNS(NS, "t"));
   for (const t of tNodes) {
     if ((t.textContent ?? "").includes(keyword)) {
