@@ -222,7 +222,16 @@ export default function ReportApp() {
     }
   };
 
-  const handleGenerateAll = () => generateReports(getTargetRecords());
+  const handleGenerateAll = () => {
+    if (selected.size > 0) {
+      // 有勾選個案 → 依勾選產生
+      const sel = [...selected].map(i => filtered[i]).filter(Boolean);
+      generateReports(sel);
+    } else {
+      // 無勾選 → 依左側產生範圍設定
+      generateReports(getTargetRecords());
+    }
+  };
   const handleGenerateSelected = () => {
     const sel = [...selected].map(i => filtered[i]).filter(Boolean);
     if (sel.length === 0) { alert("請先選取要產生報告的個案（可多選）"); return; }
