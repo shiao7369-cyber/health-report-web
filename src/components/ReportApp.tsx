@@ -122,6 +122,14 @@ export default function ReportApp() {
     setSelected(new Set());
     setStatus(`⚠️  代謝症候群個案：${f.length} 筆`);
   };
+  const showHepBC = () => {
+    const f = records.filter(r =>
+      r.rawData["hbsag"] === "陽性" || r.rawData["hcv"] === "陽性"
+    );
+    setFiltered(f);
+    setSelected(new Set());
+    setStatus(`🅱️  B/C肝陽性個案：${f.length} 筆`);
+  };
 
   // ── 排序 ─────────────────────────────────────────────────────────────────
   const handleSort = (key: SortKey) => {
@@ -256,6 +264,7 @@ export default function ReportApp() {
         <button style={btn()} onClick={() => templateInputRef.current?.click()}>📋 選擇範本</button>
         <button style={btn()} onClick={showAll}>👁 全部個案</button>
         <button style={btn({ color: C.warn })} onClick={showMetabolic}>⚠️ 代謝症候群</button>
+        <button style={btn({ color: C.accent2 })} onClick={showHepBC}>🦠 B/C肝陽性</button>
         <div style={{ flex: 1 }} />
         <button style={btn()} onClick={handleGenerateSelected} disabled={generating}>
           ✔ 產生選取
