@@ -264,7 +264,10 @@ export function buildGlucoseLine(row: RowData): string | null {
 export function buildLipidLine(row: RowData): string | null {
   const chol = v(row, "cholesterol"), tri = v(row, "triglyceride");
   const hdl  = v(row, "hdl"),         ldl = v(row, "ldl");
-  if (isEmpty(chol) && isEmpty(tri) && isEmpty(hdl) && isEmpty(ldl)) return null;
+  // 四項脂質指標均未測量：主動還原空白範本（避免範本殘留舊值）
+  if (isEmpty(chol) && isEmpty(tri) && isEmpty(hdl) && isEmpty(ldl)) {
+    return "血脂肪：□正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
+  }
   const grade = classifyLipid(chol, tri, hdl, ldl, v(row, "gender"));
   switch (grade) {
     case "normal": return "血脂肪：■正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";

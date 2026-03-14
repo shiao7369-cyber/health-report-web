@@ -32,7 +32,15 @@ export function parseExcel(buffer: ArrayBuffer): PatientRecord[] {
 
   if (rows.length < 2) return [];
 
-  const headers = (rows[0] as string[]).map(h => String(h ?? "").trim());
+  // 動態找到欄位標題列（含「姓名」的那一行）
+  let headerRowIdx = 0;
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    if ((rows[i] as string[]).some(cell => String(cell ?? "").trim() === "姓名")) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+  const headers = (rows[headerRowIdx] as string[]).map(h => String(h ?? "").trim());
 
   function idx(name: string): number {
     return headers.indexOf(name);
@@ -52,7 +60,7 @@ export function parseExcel(buffer: ArrayBuffer): PatientRecord[] {
 
   const records: PatientRecord[] = [];
 
-  for (let ri = 1; ri < rows.length; ri++) {
+  for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
     const row = rows[ri] as string[];
     const getCellStr = (i: number) =>
       i >= 0 && i < row.length && row[i] !== undefined && row[i] !== null
