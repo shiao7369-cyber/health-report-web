@@ -307,9 +307,11 @@ export function buildKidneyLine(row: RowData): string | null {
 
 export function buildLiverLine(row: RowData): string | null {
   const got = v(row, "got"), gpt = v(row, "gpt");
-  // GOT/GPT 都空白且無 B/C 肝帶原時，視為未測量
-  if (isEmpty(got) && isEmpty(gpt) &&
-      v(row, "hbsag") !== "陽性" && v(row, "hcv") !== "陽性") return null;
+  // GOT/GPT 都空白 → 肝功能未測量，主動還原空白範本
+  // （B/C 肝帶原狀態不影響此判斷：帶原者若未測GOT/GPT，肝功能欄應保持空白）
+  if (isEmpty(got) && isEmpty(gpt)) {
+    return "肝功能：□正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
+  }
   const grade = classifyLiver(got, gpt, v(row, "hbsag"), v(row, "hcv"));
   switch (grade) {
     case "normal": return "肝功能：■正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
