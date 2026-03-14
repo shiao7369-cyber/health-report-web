@@ -69,6 +69,7 @@ export default function ReportApp() {
   const [rangeMode,    setRangeMode]    = useState<"all" | "filtered" | "range">("all");
   const [rangeFrom,    setRangeFrom]    = useState("1");
   const [rangeTo,      setRangeTo]      = useState("10");
+  const [showHepMenu,  setShowHepMenu]  = useState(false);
 
   const excelInputRef    = useRef<HTMLInputElement>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
@@ -122,12 +123,22 @@ export default function ReportApp() {
     setSelected(new Set());
     setStatus(`⚠️  代謝症候群個案：${f.length} 筆`);
   };
-  const showHepBC = () => {
+  const showHepBCTested = () => {
+    const f = records.filter(r =>
+      (r.rawData["hbsag"] ?? "") !== "" || (r.rawData["hcv"] ?? "") !== ""
+    );
+    setFiltered(f);
+    setSelected(new Set());
+    setShowHepMenu(false);
+    setStatus(`🦠  已驗B/C肝個案：${f.length} 筆`);
+  };
+  const showHepBCPositive = () => {
     const f = records.filter(r =>
       r.rawData["hbsag"] === "陽性" || r.rawData["hcv"] === "陽性"
     );
     setFiltered(f);
     setSelected(new Set());
+    setShowHepMenu(false);
     setStatus(`🅱️  B/C肝陽性個案：${f.length} 筆`);
   };
 
@@ -273,7 +284,34 @@ export default function ReportApp() {
         <button style={btn()} onClick={() => templateInputRef.current?.click()}>📋 選擇範本</button>
         <button style={btn()} onClick={showAll}>👁 全部個案</button>
         <button style={btn({ color: C.warn })} onClick={showMetabolic}>⚠️ 代謝症候群</button>
-        <button style={btn({ color: C.accent2 })} onClick={showHepBC}>🦠 B/C肝陽性</button>
+        <div style={{ position: "relative" }}>
+          <button
+            style={btn({ color: C.accent2 })}
+            onClick={() => setShowHepMenu(v => !v)}
+            onBlur={() => setTimeout(() => setShowHepMenu(false), 150)}
+          >
+            🦠 B/C肝 ▾
+          </button>
+          {showHepMenu && (
+            <div style={{
+              position: "absolute", top: "calc(100% + 4px)", left: 0,
+              background: C.bgPanel, border: `1px solid ${C.border}`,
+              borderRadius: 6, zIndex: 200, minWidth: 140,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.5)", overflow: "hidden",
+            }}>
+              <button
+                style={{ ...btn(), width: "100%", textAlign: "left", borderRadius: 0,
+                          borderBottom: `1px solid ${C.border}`, padding: "8px 14px" }}
+                onMouseDown={showHepBCTested}
+              >只驗 B/C 肝</button>
+              <button
+                style={{ ...btn(), width: "100%", textAlign: "left",
+                          borderRadius: 0, padding: "8px 14px", color: C.accent2 }}
+                onMouseDown={showHepBCPositive}
+              >B/C 肝有陽性</button>
+            </div>
+          )}
+        </div>
         <div style={{ flex: 1 }} />
         <button style={btn()} onClick={handleGenerateSelected} disabled={generating}>
           ✔ 產生選取
