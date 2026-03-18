@@ -83,7 +83,7 @@ export function parseExcel(buffer: ArrayBuffer): PatientRecord[] {
     let bpStr = sbpStr && dbpStr ? `${sbpStr}/${dbpStr}` : sbpStr;
     const sbpN = parseFloat(sbpStr);
     const dbpN = parseFloat(dbpStr);
-    const bpOk = !isNaN(sbpN) && !isNaN(dbpN) ? sbpN < 130 && dbpN < 80 : true;
+    const bpOk = !isNaN(sbpN) && !isNaN(dbpN) ? sbpN < 130 && dbpN < 85 : true;
 
     // 血糖
     const glucStr = getCellStr(glucI);
