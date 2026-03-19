@@ -9,6 +9,7 @@ import type { RowData } from "./report-logic";
 export interface PatientRecord {
   // 顯示用
   _index: number;         // 1-based，對應 Excel 第幾筆
+  serialNo: string;       // 序號，如 202602-93001
   date: string;
   name: string;
   gender: string;
@@ -25,7 +26,84 @@ export interface PatientRecord {
   rawData: RowData;
 }
 
-export function parseExcel(buffer: ArrayBuffer): PatientRecord[] {
+// 序號對照表：病歷號(10位字串) → 序號(如 202602-93001)
+export type SerialMapping = Map<string, string>;
+
+/**
+ * 自動偵測 Excel 類型
+ * - "health"  : 健檢資料（含「健檢號碼」欄）
+ * - "mapping" : 序號對照表（含「病歷號」欄）
+ * - "unknown" : 無法判斷
+ */
+export function detectExcelType(buffer: ArrayBuffer): "health" | "mapping" | "unknown" {
+  try {
+    const wb = XLSX.read(buffer, { type: "array", cellText: false, cellDates: false });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" }) as string[][];
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+      const row = (rows[i] as string[]).map(c => String(c).trim());
+      if (row.includes("健檢號碼")) return "health";
+      if (row.includes("病歷號"))   return "mapping";
+    }
+  } catch { /* ignore */ }
+  return "unknown";
+}
+
+/**
+ * 解析序號對照表（0308成健-V2.xlsx 格式）
+ * 格式：第0列為標題、第1列為欄位標題（含「病歷號」），序號欄為無標題但含 YYYYMM-NNNNN 格式
+ */
+export function parseMappingExcel(buffer: ArrayBuffer): SerialMapping {
+  const wb = XLSX.read(buffer, { type: "array", cellText: true, cellDates: false });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" }) as string[][];
+
+  // 找到含「病歷號」的標題列
+  let headerRowIdx = -1;
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    if ((rows[i] as string[]).some(cell => String(cell).trim() === "病歷號")) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+  if (headerRowIdx === -1) return new Map();
+
+  const headers = (rows[headerRowIdx] as string[]).map(h => String(h ?? "").trim());
+  const medIdIdx = headers.indexOf("病歷號");
+  if (medIdIdx === -1) return new Map();
+
+  // 找序號欄：掃描資料列，看哪欄符合 YYYYMM-NNNNN 格式
+  const serialPattern = /^\d{6}-\d{5}$/;
+  let serialIdx = -1;
+  outer: for (let ri = headerRowIdx + 1; ri < Math.min(headerRowIdx + 6, rows.length); ri++) {
+    const row = rows[ri] as string[];
+    for (let ci = 0; ci < row.length; ci++) {
+      if (serialPattern.test(String(row[ci]).trim())) {
+        serialIdx = ci;
+        break outer;
+      }
+    }
+  }
+  if (serialIdx === -1) return new Map();
+
+  const mapping = new Map<string, string>();
+  for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+    const row = rows[ri] as string[];
+    const medIdRaw = String(row[medIdIdx] ?? "").trim().replace(/\D/g, "");
+    const serial   = String(row[serialIdx] ?? "").trim();
+    if (!medIdRaw || !serialPattern.test(serial)) continue;
+    const medId = medIdRaw.padStart(10, "0");
+    mapping.set(medId, serial);
+  }
+  return mapping;
+}
+
+/**
+ * 解析健檢 Excel（115年社區成人健檢格式）
+ * @param buffer      Excel ArrayBuffer
+ * @param serialMapping 可選的序號對照表；若提供則以病歷號比對後填入 serialNo
+ */
+export function parseExcel(buffer: ArrayBuffer, serialMapping?: SerialMapping): PatientRecord[] {
   const wb = XLSX.read(buffer, { type: "array", cellText: true, cellDates: false });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" }) as string[][];
@@ -46,17 +124,19 @@ export function parseExcel(buffer: ArrayBuffer): PatientRecord[] {
     return headers.indexOf(name);
   }
 
-  const nameI   = idx("姓名");
-  const dateI   = idx("體檢日");
-  const genderI = idx("性別");
-  const ageI    = idx("年齡");
-  const bmiI    = idx("身體質量指數");
-  const sbpI    = idx("收縮壓");
-  const dbpI    = idx("舒張壓");
-  const glucI   = idx("血糖");
-  const waistI  = idx("腰圍");
-  const tgI     = idx("三酸甘油脂");
-  const hdlI    = idx("高密度膽固醇");
+  const nameI    = idx("姓名");
+  const dateI    = idx("體檢日");
+  const genderI  = idx("性別");
+  const ageI     = idx("年齡");
+  const bmiI     = idx("身體質量指數");
+  const sbpI     = idx("收縮壓");
+  const dbpI     = idx("舒張壓");
+  const glucI    = idx("血糖");
+  const waistI   = idx("腰圍");
+  const tgI      = idx("三酸甘油脂");
+  const hdlI     = idx("高密度膽固醇");
+  const serialI  = idx("序號");
+  const healthIdI = idx("健檢號碼");
 
   const records: PatientRecord[] = [];
 
@@ -111,8 +191,18 @@ export function parseExcel(buffer: ArrayBuffer): PatientRecord[] {
       msItems.push("HDL");
     const ms = msItems.length >= 3;
 
+    // 序號：優先讀 Excel 內的序號欄；若無則從對照表查病歷號
+    let serialNo = getCellStr(serialI);
+    if (!serialNo && serialMapping) {
+      const rawId = getCellStr(healthIdI).replace(/\D/g, "").padStart(10, "0");
+      serialNo = serialMapping.get(rawId) ?? "";
+    }
+    // 同步寫入 rawData 讓 docx 產生時可用
+    if (serialNo) rawData["serial_no"] = serialNo;
+
     records.push({
-      _index: ri,
+      _index:   ri,
+      serialNo,
       date:     getCellStr(dateI),
       name:     nameVal,
       gender,

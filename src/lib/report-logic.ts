@@ -6,6 +6,7 @@ export type RowData = Record<string, string>;
 
 // ── 欄位對應 (Excel 標題 → JS 變數名) ─────────────────────────────────────────
 export const COL_MAP: Record<string, string> = {
+  "序號": "serial_no",
   "體檢日": "exam_date",
   "健檢號碼": "id",
   "姓名": "name",

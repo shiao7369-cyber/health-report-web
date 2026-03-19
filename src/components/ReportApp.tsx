@@ -3,7 +3,8 @@
  * 仿照 Python Tkinter 版的深色 UI 風格
  */
 import { useState, useCallback, useRef } from "react";
-import { parseExcel } from "../lib/excel-reader";
+import { parseExcel, parseMappingExcel, detectExcelType } from "../lib/excel-reader";
+import type { SerialMapping } from "../lib/excel-reader";
 import { fillReport, makeFilename } from "../lib/docx-generator";
 import JSZip from "jszip";
 
@@ -40,7 +41,7 @@ const C = {
 
 // ── 欄位定義 ─────────────────────────────────────────────────────────────────
 const COLS = [
-  { key: "seq",       label: "序",     w: 40  },
+  { key: "seq",       label: "序號",        w: 110 },
   { key: "date",      label: "體檢日",  w: 90  },
   { key: "name",      label: "姓名",    w: 80  },
   { key: "gender",    label: "性別",    w: 48  },
@@ -52,27 +53,33 @@ const COLS = [
   { key: "msItems",   label: "風險項目", w: 220 },
 ];
 
-type SortKey = "date" | "name" | "gender" | "age" | "bmi" | "bp" | "glucose" | "metabolic" | null;
+type SortKey = "serialNo" | "date" | "name" | "gender" | "age" | "bmi" | "bp" | "glucose" | "metabolic" | null;
 
 export default function ReportApp() {
-  const [excelFile,    setExcelFile]    = useState<File | null>(null);
-  const [templateFile, setTemplateFile] = useState<File | null>(null);
-  const [records,      setRecords]      = useState<PatientRecord[]>([]);
-  const [filtered,     setFiltered]     = useState<PatientRecord[]>([]);
-  const [searchKw,     setSearchKw]     = useState("");
-  const [selected,     setSelected]     = useState<Set<number>>(new Set()); // indices into filtered
-  const [status,       setStatus]       = useState("尚未載入資料");
-  const [generating,   setGenerating]   = useState(false);
-  const [progress,     setProgress]     = useState({ done: 0, total: 0 });
-  const [sortKey,      setSortKey]      = useState<SortKey>(null);
-  const [sortAsc,      setSortAsc]      = useState(true);
-  const [rangeMode,    setRangeMode]    = useState<"all" | "filtered" | "range">("all");
-  const [rangeFrom,    setRangeFrom]    = useState("1");
-  const [rangeTo,      setRangeTo]      = useState("10");
-  const [showHepMenu,  setShowHepMenu]  = useState(false);
+  const [excelFile,     setExcelFile]     = useState<File | null>(null);
+  const [mappingFile,   setMappingFile]   = useState<File | null>(null);
+  const [templateFile,  setTemplateFile]  = useState<File | null>(null);
+  const [excelBuf,      setExcelBuf]      = useState<ArrayBuffer | null>(null);
+  const [serialMapping, setSerialMapping] = useState<SerialMapping | null>(null);
+  const [records,       setRecords]       = useState<PatientRecord[]>([]);
+  const [filtered,      setFiltered]      = useState<PatientRecord[]>([]);
+  const [searchKw,      setSearchKw]      = useState("");
+  const [selected,      setSelected]      = useState<Set<number>>(new Set()); // indices into filtered
+  const [status,        setStatus]        = useState("尚未載入資料");
+  const [generating,    setGenerating]    = useState(false);
+  const [progress,      setProgress]      = useState({ done: 0, total: 0 });
+  const [sortKey,       setSortKey]       = useState<SortKey>(null);
+  const [sortAsc,       setSortAsc]       = useState(true);
+  const [rangeMode,     setRangeMode]     = useState<"all" | "filtered" | "range">("all");
+  const [rangeFrom,     setRangeFrom]     = useState("1");
+  const [rangeTo,       setRangeTo]       = useState("10");
+  const [showHepMenu,   setShowHepMenu]   = useState(false);
+  const [isDragOver,    setIsDragOver]    = useState(false);
 
   const excelInputRef    = useRef<HTMLInputElement>(null);
+  const mappingInputRef  = useRef<HTMLInputElement>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
+  const dropInputRef     = useRef<HTMLInputElement>(null);
 
   // ── 搜尋過濾 ──────────────────────────────────────────────────────────────
   const applyFilter = useCallback((kw: string, recs: PatientRecord[]) => {
@@ -86,22 +93,97 @@ export default function ReportApp() {
     );
   }, []);
 
-  // ── 匯入 Excel ──────────────────────────────────────────────────────────
-  const handleExcelFile = useCallback(async (file: File) => {
+  // ── 匯入健檢 Excel ────────────────────────────────────────────────────
+  const handleExcelFile = useCallback(async (file: File, mapping?: SerialMapping | null) => {
     setExcelFile(file);
     setStatus("載入中...");
     try {
       const buf = await file.arrayBuffer();
-      const recs = parseExcel(buf);
+      setExcelBuf(buf);
+      const activeMapping = mapping !== undefined ? mapping : serialMapping;
+      const recs = parseExcel(buf, activeMapping ?? undefined);
       setRecords(recs);
       const f = applyFilter(searchKw, recs);
       setFiltered(f);
       setSelected(new Set());
-      setStatus(`✅  已載入 ${recs.length} 筆資料  ·  ${file.name}`);
+      const matched = activeMapping ? recs.filter(r => r.serialNo).length : null;
+      const matchStr = matched !== null ? `  ·  序號對照 ${matched}/${recs.length} 筆` : "";
+      setStatus(`✅  已載入 ${recs.length} 筆資料${matchStr}  ·  ${file.name}`);
     } catch (e: unknown) {
       setStatus(`❌  載入失敗：${String(e)}`);
     }
-  }, [searchKw, applyFilter]);
+  }, [searchKw, applyFilter, serialMapping]);
+
+  // ── 匯入序號對照表 ────────────────────────────────────────────────────
+  const handleMappingFile = useCallback(async (file: File) => {
+    setMappingFile(file);
+    setStatus("載入序號對照表...");
+    try {
+      const buf = await file.arrayBuffer();
+      const mapping = parseMappingExcel(buf);
+      setSerialMapping(mapping);
+      if (excelBuf) {
+        // 健檢資料已載入 → 重新合併
+        const recs = parseExcel(excelBuf, mapping);
+        setRecords(recs);
+        const f = applyFilter(searchKw, recs);
+        setFiltered(f);
+        setSelected(new Set());
+        const matched = recs.filter(r => r.serialNo).length;
+        setStatus(`✅  序號對照完成 ${matched}/${recs.length} 筆  ·  ${file.name}`);
+      } else {
+        setStatus(`✅  序號對照表已載入（${mapping.size} 筆）  ·  ${file.name}`);
+      }
+    } catch (e: unknown) {
+      setStatus(`❌  序號對照表載入失敗：${String(e)}`);
+    }
+  }, [excelBuf, searchKw, applyFilter]);
+
+  // ── 同時處理多個拖入/選入的 Excel（自動辨別類型）──────────────────────
+  const handleDropFiles = useCallback(async (files: FileList | File[]) => {
+    const xlsxList = Array.from(files).filter(f => /\.xlsx?$/i.test(f.name));
+    if (xlsxList.length === 0) return;
+
+    setStatus("🔍 自動辨別檔案類型...");
+    const bufs = await Promise.all(xlsxList.map(f => f.arrayBuffer()));
+
+    let hFile: File | null = null, hBuf: ArrayBuffer | null = null;
+    let mFile: File | null = null, mBuf: ArrayBuffer | null = null;
+
+    for (let i = 0; i < xlsxList.length; i++) {
+      const type = detectExcelType(bufs[i]);
+      if (type === "health")  { hFile = xlsxList[i]; hBuf = bufs[i]; }
+      else if (type === "mapping") { mFile = xlsxList[i]; mBuf = bufs[i]; }
+    }
+
+    // 先建立 mapping（若有）
+    let activeMapping: SerialMapping | null = serialMapping;
+    if (mBuf && mFile) {
+      activeMapping = parseMappingExcel(mBuf);
+      setMappingFile(mFile);
+      setSerialMapping(activeMapping);
+    }
+
+    // 再解析健檢資料
+    const activeBuf   = hBuf   ?? excelBuf;
+    const activeHFile = hFile  ?? excelFile;
+    if (activeBuf && activeHFile) {
+      if (hFile) { setExcelFile(hFile); setExcelBuf(hBuf!); }
+      const recs = parseExcel(activeBuf, activeMapping ?? undefined);
+      setRecords(recs);
+      const f = applyFilter(searchKw, recs);
+      setFiltered(f);
+      setSelected(new Set());
+      const matched = activeMapping ? recs.filter(r => r.serialNo).length : null;
+      const parts: string[] = [`✅  已載入 ${recs.length} 筆`];
+      if (matched !== null) parts.push(`序號對照 ${matched}/${recs.length} 筆`);
+      setStatus(parts.join("  ·  "));
+    } else if (mFile && activeMapping) {
+      setStatus(`✅  序號對照表已載入（${activeMapping.size} 筆）·  請再拖入健檢 Excel`);
+    } else {
+      setStatus("⚠️  無法辨別檔案類型，請確認欄位含「健檢號碼」或「病歷號」");
+    }
+  }, [serialMapping, excelBuf, excelFile, searchKw, applyFilter]);
 
   // ── 搜尋 ─────────────────────────────────────────────────────────────────
   const handleSearch = useCallback((kw: string) => {
@@ -149,9 +231,11 @@ export default function ReportApp() {
     setSortAsc(newAsc);
     if (!key) return;
     const sorted = [...filtered].sort((a, b) => {
-      let av = (a as Record<string, unknown>)[key] as string ?? "";
-      let bv = (b as Record<string, unknown>)[key] as string ?? "";
-      const an = parseFloat(av), bn = parseFloat(bv);
+      const av = (a as Record<string, unknown>)[key] as string ?? "";
+      const bv = (b as Record<string, unknown>)[key] as string ?? "";
+      // 只在字串整體是純數字時才用數值排序，避免 parseFloat("202602-93001") 誤判
+      const an = av !== "" && !isNaN(Number(av)) ? Number(av) : NaN;
+      const bn = bv !== "" && !isNaN(Number(bv)) ? Number(bv) : NaN;
       const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv, "zh-TW");
       return newAsc ? cmp : -cmp;
     });
@@ -277,10 +361,15 @@ export default function ReportApp() {
         {/* 隱藏的 file input */}
         <input ref={excelInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) handleExcelFile(f); e.target.value = ""; }} />
+        <input ref={mappingInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleMappingFile(f); e.target.value = ""; }} />
+        <input ref={dropInputRef} type="file" accept=".xlsx,.xls" multiple style={{ display: "none" }}
+          onChange={e => { if (e.target.files?.length) handleDropFiles(e.target.files); e.target.value = ""; }} />
         <input ref={templateInputRef} type="file" accept=".docx" style={{ display: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) { setTemplateFile(f); setStatus(`範本：${f.name}`); } e.target.value = ""; }} />
 
         <button style={btn()} onClick={() => excelInputRef.current?.click()}>📂 匯入 Excel</button>
+        <button style={btn({ color: C.accent2 })} onClick={() => mappingInputRef.current?.click()}>🔢 序號對照表</button>
         <button style={btn()} onClick={() => templateInputRef.current?.click()}>📋 選擇範本</button>
         <button style={btn()} onClick={showAll}>👁 全部個案</button>
         <button style={btn({ color: C.warn })} onClick={showMetabolic}>⚠️ 代謝症候群</button>
@@ -330,8 +419,87 @@ export default function ReportApp() {
                       gap: 8, border: `1px solid ${C.border}`, flexShrink: 0 }}>
 
           <SideSection title="📄 資料來源" accent={C.accent} border={C.border}>
-            <FilePathRow label="Excel 檔案" name={excelFile?.name}
-              onClick={() => excelInputRef.current?.click()} accent={C.accent} />
+            {/* ── Drop Zone ── */}
+            <div
+              onClick={() => dropInputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={e => {
+                e.preventDefault();
+                setIsDragOver(false);
+                if (e.dataTransfer.files.length) handleDropFiles(e.dataTransfer.files);
+              }}
+              style={{
+                border: `2px dashed ${isDragOver ? C.accent : (excelFile || mappingFile) ? C.accent2 + "88" : C.border}`,
+                borderRadius: 8,
+                padding: "10px 8px",
+                cursor: "pointer",
+                background: isDragOver ? C.accent + "18" : C.bgRowA,
+                transition: "border-color 0.15s, background 0.15s",
+                marginBottom: 8,
+                textAlign: "center",
+              }}>
+              {!excelFile && !mappingFile ? (
+                /* 空白提示 */
+                <div>
+                  <div style={{ fontSize: 22, marginBottom: 4 }}>📂</div>
+                  <div style={{ color: C.accent, fontSize: 12, fontWeight: "bold", marginBottom: 2 }}>
+                    拖曳 Excel 至此
+                  </div>
+                  <div style={{ color: C.textDim, fontSize: 11, marginBottom: 6 }}>
+                    可同時放入兩個檔案
+                  </div>
+                  <div style={{ display: "inline-block", background: C.bgPanel,
+                                border: `1px solid ${C.border}`, borderRadius: 4,
+                                padding: "2px 10px", color: C.textDim, fontSize: 11 }}>
+                    + 點選新增
+                  </div>
+                </div>
+              ) : (
+                /* 已載入的檔案清單 */
+                <div style={{ textAlign: "left" }} onClick={e => e.stopPropagation()}>
+                  {excelFile && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                      <span style={{ fontSize: 14 }}>📊</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: C.success, fontSize: 10, fontWeight: "bold" }}>健檢資料</div>
+                        <div style={{ color: C.textMain, fontSize: 11,
+                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {excelFile.name}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {mappingFile && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                      <span style={{ fontSize: 14 }}>🔢</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ color: C.accent2, fontSize: 10, fontWeight: "bold" }}>序號對照表</span>
+                          {serialMapping && (
+                            <span style={{ background: C.accent2 + "33", color: C.accent2,
+                                            fontSize: 9, borderRadius: 3, padding: "0 4px" }}>
+                              ✓ {serialMapping.size}筆
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ color: C.textMain, fontSize: 11,
+                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {mappingFile.name}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    onClick={() => dropInputRef.current?.click()}
+                    style={{ textAlign: "center", marginTop: 4, color: C.textDim,
+                              fontSize: 11, cursor: "pointer",
+                              borderTop: `1px solid ${C.border}`, paddingTop: 6 }}>
+                    ＋ 拖曳或點選以更換 / 新增
+                  </div>
+                </div>
+              )}
+            </div>
             <FilePathRow label="報告範本 (.docx)" name={templateFile?.name}
               onClick={() => templateInputRef.current?.click()} accent={C.accent} />
           </SideSection>
@@ -424,11 +592,11 @@ export default function ReportApp() {
                     <th key={col.key}
                       style={{ padding: "8px 6px", color: C.accent, textAlign: "center",
                                 borderBottom: `1px solid ${C.border}`, minWidth: col.w,
-                                cursor: col.key !== "seq" && col.key !== "msItems" ? "pointer" : "default",
+                                cursor: col.key !== "msItems" ? "pointer" : "default",
                                 userSelect: "none" }}
-                      onClick={() => col.key !== "seq" && col.key !== "msItems" && handleSort(col.key as SortKey)}>
+                      onClick={() => col.key !== "msItems" && handleSort(col.key === "seq" ? "serialNo" : col.key as SortKey)}>
                       {col.label}
-                      {sortKey === col.key && <span style={{ marginLeft: 4 }}>{sortAsc ? "▲" : "▼"}</span>}
+                      {(sortKey === col.key || (col.key === "seq" && sortKey === "serialNo")) && <span style={{ marginLeft: 4 }}>{sortAsc ? "▲" : "▼"}</span>}
                     </th>
                   ))}
                 </tr>
@@ -458,7 +626,7 @@ export default function ReportApp() {
                           onClick={e => e.stopPropagation()}
                           style={{ accentColor: C.accent }} />
                       </td>
-                      <td style={{ textAlign: "center", padding: "6px 4px", color: C.textDim }}>{i + 1}</td>
+                      <td style={{ textAlign: "center", padding: "6px 4px", color: C.textDim }}>{rec.serialNo || (i + 1)}</td>
                       <td style={{ textAlign: "center", padding: "6px 4px" }}>{rec.date}</td>
                       <td style={{ textAlign: "center", padding: "6px 4px", fontWeight: "bold" }}>{rec.name}</td>
                       <td style={{ textAlign: "center", padding: "6px 4px" }}>{rec.gender}</td>
@@ -507,13 +675,21 @@ function SideSection({
 }
 
 function FilePathRow({
-  label, name, onClick, accent
-}: { label: string; name?: string; onClick: () => void; accent: string }) {
+  label, name, onClick, accent, badge
+}: { label: string; name?: string; onClick: () => void; accent: string; badge?: string }) {
   return (
     <div style={{ marginBottom: 8 }}>
-      <div style={{ color: "#8A94B0", fontSize: 11, marginBottom: 3 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        <span style={{ color: "#8A94B0", fontSize: 11 }}>{label}</span>
+        {badge && (
+          <span style={{ background: accent + "33", color: accent, fontSize: 10,
+                          borderRadius: 4, padding: "1px 5px", fontWeight: "bold" }}>
+            ✓ {badge}
+          </span>
+        )}
+      </div>
       <div style={{ display: "flex", gap: 4 }}>
-        <div style={{ flex: 1, background: "#2A3147", border: "1px solid #353D52",
+        <div style={{ flex: 1, background: "#2A3147", border: `1px solid ${name ? accent + "66" : "#353D52"}`,
                       borderRadius: 4, padding: "3px 6px", fontSize: 11,
                       color: name ? "#E8EAF0" : "#8A94B0",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
