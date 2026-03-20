@@ -238,7 +238,7 @@ export async function fillReport(
     }
   }
 
-  // ── 頁尾下方加一列空白列（無框線）─────────────────────────────────────────
+  // ── 頁尾下方加一列空白列（完全無框線）──────────────────────────────────────
   const allTables = Array.from(doc.getElementsByTagNameNS(NS, "tbl"));
   for (const tbl of allTables) {
     const tblTrs = Array.from(tbl.getElementsByTagNameNS(NS, "tr"));
@@ -250,9 +250,26 @@ export async function fillReport(
       // 清空文字
       Array.from(emptyTr.getElementsByTagNameNS(NS, "t"))
         .forEach(t => { t.textContent = ""; });
-      // 移除所有框線設定（w:tcBorders）讓空白列無框線
-      Array.from(emptyTr.getElementsByTagNameNS(NS, "tcBorders"))
-        .forEach(b => b.parentNode!.removeChild(b));
+      // 對每個儲存格明確設定所有框線為 nil（蓋掉繼承的表格框線）
+      const sides = ["top", "left", "bottom", "right", "insideH", "insideV"];
+      Array.from(emptyTr.getElementsByTagNameNS(NS, "tc")).forEach(tc => {
+        let tcPr = tc.getElementsByTagNameNS(NS, "tcPr")[0];
+        if (!tcPr) {
+          tcPr = doc.createElementNS(NS, "w:tcPr");
+          tc.insertBefore(tcPr, tc.firstChild);
+        }
+        // 移除舊的 tcBorders
+        Array.from(tcPr.getElementsByTagNameNS(NS, "tcBorders"))
+          .forEach(b => tcPr.removeChild(b));
+        // 建立新的 tcBorders 全部設 nil
+        const borders = doc.createElementNS(NS, "w:tcBorders");
+        for (const side of sides) {
+          const el = doc.createElementNS(NS, `w:${side}`);
+          el.setAttributeNS(NS, "w:val", "nil");
+          borders.appendChild(el);
+        }
+        tcPr.appendChild(borders);
+      });
       footerTr.parentNode!.appendChild(emptyTr);
       break;
     }
