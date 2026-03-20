@@ -793,7 +793,8 @@ function PrintPreviewModal({
           '.page:last-child{page-break-after:auto;margin-bottom:0;}',
           '@media print{body{background:none;margin:0;padding:0;}.page{box-shadow:none;margin:0;padding:0;width:auto;min-height:auto;}}',
           'table{width:100%;border-collapse:collapse;}',
-          'td,th{border:1px solid #000;padding:2px 4px;font-size:9pt;}',
+          'td,th{border:1px solid #000;padding:2px 4px;font-size:9pt;min-height:20pt;}',
+          'tr{height:20pt;}',
           'p{margin:0;padding:0;}',
         ].join('');
         const body = htmlParts.map(h => '<div class="page">' + h + '</div>').join('');
