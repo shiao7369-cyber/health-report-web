@@ -437,7 +437,7 @@ export default function ReportApp() {
         <div style={{ flex: 1 }} />
         <div style={{ position: "relative" }}>
           <button
-            style={btnTool()}
+            style={btnToolAccent}
             onClick={() => setShowPrintMenu(v => !v)}
             onBlur={() => setTimeout(() => setShowPrintMenu(false), 150)}
           >
