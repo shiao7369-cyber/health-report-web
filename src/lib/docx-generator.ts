@@ -116,28 +116,34 @@ export async function fillReport(
 
     // ── 健康諮詢行 ──────────────────────────────────────────────────────────
     if (joined.includes("□戒菸□節酒")) {
-      fillTextNode(tr, "□戒菸□節酒", buildCounselLine1(rowData));
+      replaceCellText(tr, "□戒菸□節酒", buildCounselLine1(rowData));
       continue;
     }
     if (joined.includes("□健康飲食(含我的健康餐盤)")) {
-      fillTextNode(tr, "□健康飲食(含我的健康餐盤)", buildCounselLine2(rowData));
+      replaceCellText(tr, "□健康飲食(含我的健康餐盤)", buildCounselLine2(rowData));
       continue;
     }
     if (joined.includes("慢性疾病風險評估") && !joined.includes("腎病識能") && !joined.includes("風險值")) {
       const chronicVal = v(rowData, "counsel_chronic2") || v(rowData, "counsel_chronic");
       const mark = chronicVal === "是" ? "■" : "□";
-      const tNodes = Array.from(tr.getElementsByTagNameNS(NS, "t"));
-      for (const t of tNodes) {
-        if ((t.textContent ?? "").includes("慢性疾病風險評估")) {
-          t.textContent = `${mark}慢性疾病風險評估`;
-        } else if ((t.textContent ?? "").trim() === "□") {
-          t.textContent = "";
+      replaceCellText(tr, "慢性疾病風險評估", `${mark}慢性疾病風險評估`);
+      continue;
+    }
+    if (joined.includes("代謝症候群定義")) {
+      // 保留原文字但統一字型大小為 10pt
+      const tcs = Array.from(tr.getElementsByTagNameNS(NS, "tc"));
+      for (const tc of tcs) {
+        if (allText(tc).includes("代謝症候群定義")) {
+          const text = allText(tc);
+          const paras = Array.from(tc.getElementsByTagNameNS(NS, "p"));
+          clearAndFill(paras, text);
+          break;
         }
       }
       continue;
     }
     if (joined.includes("腎病識能衛教指導") || joined.includes("□腎病識能")) {
-      fillTextNode(tr, "腎病識能", buildCounselKidney(rowData));
+      replaceCellText(tr, "腎病識能", buildCounselKidney(rowData));
       continue;
     }
 
