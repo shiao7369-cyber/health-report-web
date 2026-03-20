@@ -356,6 +356,26 @@ export default function ReportApp() {
     setStatus(`🖨️  預覽列印 — ${sorted.length} 份（序號${asc ? "由小到大" : "由大到小"}）`);
   };
 
+  // 多重報告：每份印兩張，順序 AABBCC（依序號由小到大）
+  const handlePrintDouble = () => {
+    setShowPrintMenu(false);
+    if (!templateFile) { alert("請先選擇報告範本 (.docx)"); return; }
+    const base = selected.size > 0
+      ? [...selected].map(i => filtered[i]).filter(Boolean)
+      : [...filtered];
+    if (base.length === 0) { alert("沒有可列印的個案"); return; }
+    const sorted = [...base].sort((a, b) =>
+      (a.serialNo || "").localeCompare(b.serialNo || "", "zh-TW")
+    );
+    // 每份連續出現兩次：A A B B C C
+    const doubled = sorted.flatMap(r => [
+      { rawData: r.rawData, serialNo: r.serialNo },
+      { rawData: r.rawData, serialNo: r.serialNo },
+    ]);
+    setPrintRecords(doubled);
+    setStatus(`🖨️  預覽列印（多重）— ${sorted.length} 份 × 2 = ${doubled.length} 頁`);
+  };
+
   const btn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
     background: "#F1F5F9", color: C.textMain, border: `1px solid ${C.border}`,
     borderRadius: 6, padding: "6px 14px", cursor: "pointer",
@@ -456,10 +476,15 @@ export default function ReportApp() {
                 onMouseDown={() => handlePrint(true)}
               >序號由小到大列印</button>
               <button
-                style={{ ...btn(), width: "100%", textAlign: "left",
-                          borderRadius: 0, padding: "8px 14px", color: C.textMain }}
+                style={{ ...btn(), width: "100%", textAlign: "left", borderRadius: 0,
+                          borderBottom: `1px solid ${C.border}`, padding: "8px 14px", color: C.textMain }}
                 onMouseDown={() => handlePrint(false)}
               >序號由大到小列印</button>
+              <button
+                style={{ ...btn(), width: "100%", textAlign: "left",
+                          borderRadius: 0, padding: "8px 14px", color: C.accent, fontWeight: "bold" }}
+                onMouseDown={handlePrintDouble}
+              >📋 多重報告（每份 ×2）</button>
             </div>
           )}
         </div>
