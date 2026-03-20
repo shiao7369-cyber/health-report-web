@@ -238,39 +238,22 @@ export async function fillReport(
     }
   }
 
-  // ── 頁尾下方加一列空白列（無框線）用 DOMParser 注入 XML 字串 ────────────────
+  // ── 頁尾後插入空白段落（高度約 1.5 行），完全不涉及表格框線 ────────────────
   const allTables = Array.from(doc.getElementsByTagNameNS(NS, "tbl"));
   for (const tbl of allTables) {
     const tblTrs = Array.from(tbl.getElementsByTagNameNS(NS, "tr"));
-    const footerTr = [...tblTrs].reverse().find(tr =>
+    const hasFooter = tblTrs.some(tr =>
       getCellTexts(tr).join("").includes("特約醫事")
     );
-    if (footerTr) {
-      // 取得各儲存格寬度，建立對應的空白儲存格 XML（框線全部 nil）
-      const footerTcs = Array.from(footerTr.getElementsByTagNameNS(NS, "tc"));
-      const cellsXml = footerTcs.map(tc => {
-        const tcW = tc.getElementsByTagNameNS(NS, "tcW")[0];
-        const wVal  = tcW?.getAttribute("w:w")    ?? "2000";
-        const wType = tcW?.getAttribute("w:type") ?? "dxa";
-        return `<w:tc>` +
-          `<w:tcPr>` +
-            `<w:tcW w:w="${wVal}" w:type="${wType}"/>` +
-            `<w:tcBorders>` +
-              `<w:top w:val="nil"/><w:left w:val="nil"/>` +
-              `<w:bottom w:val="nil"/><w:right w:val="nil"/>` +
-            `</w:tcBorders>` +
-          `</w:tcPr>` +
-          `<w:p/>` +
-        `</w:tc>`;
-      }).join("");
-      const rowXml =
-        `<w:tr xmlns:w="${NS}">` +
-          `<w:trPr><w:trHeight w:val="454"/></w:trPr>` +
-          cellsXml +
-        `</w:tr>`;
-      const emptyTrDoc = new DOMParser().parseFromString(rowXml, "text/xml");
-      const emptyTr = doc.adoptNode(emptyTrDoc.documentElement);
-      footerTr.parentNode!.appendChild(emptyTr);
+    if (hasFooter) {
+      const paraXml =
+        `<w:p xmlns:w="${NS}">` +
+          `<w:pPr><w:spacing w:before="0" w:after="360"/></w:pPr>` +
+        `</w:p>`;
+      const paraDoc = new DOMParser().parseFromString(paraXml, "text/xml");
+      const para = doc.adoptNode(paraDoc.documentElement);
+      // 插入到表格的下一個兄弟節點之前（即表格之後）
+      tbl.parentNode!.insertBefore(para, tbl.nextSibling);
       break;
     }
   }
