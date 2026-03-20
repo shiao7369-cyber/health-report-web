@@ -2,11 +2,12 @@
  * 健檢報告產生程式 — React 主元件
  * 仿照 Python Tkinter 版的深色 UI 風格
  */
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { parseExcel, parseMappingExcel, detectExcelType } from "../lib/excel-reader";
 import type { SerialMapping } from "../lib/excel-reader";
 import { fillReport, makeFilename } from "../lib/docx-generator";
 import JSZip from "jszip";
+import mammoth from "mammoth";
 
 function saveAs(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -19,24 +20,26 @@ function saveAs(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 import type { PatientRecord } from "../lib/excel-reader";
+import type { RowData } from "../lib/report-logic";
 
 // ── 色系 ──────────────────────────────────────────────────────────────────────
 const C = {
-  bgDark:   "#1E2230",
-  bgPanel:  "#252B3B",
-  bgRowA:   "#2A3147",
-  bgRowB:   "#242A3A",
-  bgHover:  "#313A52",
-  accent:   "#4C9BE8",
-  accent2:  "#5BBFA8",
-  warn:     "#E8864C",
-  success:  "#5BB870",
-  textMain: "#E8EAF0",
-  textDim:  "#8A94B0",
+  bgDark:    "#F0F4F8",
+  bgToolbar: "#1E3A6E",
+  bgPanel:   "#FFFFFF",
+  bgRowA:    "#FFFFFF",
+  bgRowB:    "#F8FAFC",
+  bgHover:   "#EBF3FF",
+  accent:    "#1D4ED8",
+  accent2:   "#0E7490",
+  warn:      "#D97706",
+  success:   "#047857",
+  textMain:  "#1E293B",
+  textDim:   "#64748B",
   textHead: "#FFFFFF",
-  border:   "#353D52",
-  msBg:     "#3A2A2A",
-  msFg:     "#FFB3A0",
+  border:    "#CBD5E1",
+  msBg:      "#FEE2E2",
+  msFg:      "#B91C1C",
 };
 
 // ── 欄位定義 ─────────────────────────────────────────────────────────────────
@@ -75,6 +78,8 @@ export default function ReportApp() {
   const [rangeTo,       setRangeTo]       = useState("10");
   const [showHepMenu,   setShowHepMenu]   = useState(false);
   const [isDragOver,    setIsDragOver]    = useState(false);
+  const [showPrintMenu, setShowPrintMenu] = useState(false);
+  const [printRecords,  setPrintRecords]  = useState<{ rawData: RowData; serialNo: string }[] | null>(null);
 
   const excelInputRef    = useRef<HTMLInputElement>(null);
   const mappingInputRef  = useRef<HTMLInputElement>(null);
@@ -334,23 +339,51 @@ export default function ReportApp() {
   };
 
   // ── 樣式工具 ─────────────────────────────────────────────────────────────
+  // ── 列印報告 ─────────────────────────────────────────────────────────────
+  const handlePrint = (asc: boolean) => {
+    setShowPrintMenu(false);
+    if (!templateFile) { alert("請先選擇報告範本 (.docx)"); return; }
+    const base = selected.size > 0
+      ? [...selected].map(i => filtered[i]).filter(Boolean)
+      : [...filtered];
+    if (base.length === 0) { alert("沒有可列印的個案"); return; }
+    const sorted = [...base].sort((a, b) => {
+      const av = a.serialNo || "";
+      const bv = b.serialNo || "";
+      return asc ? av.localeCompare(bv, "zh-TW") : bv.localeCompare(av, "zh-TW");
+    });
+    setPrintRecords(sorted.map(r => ({ rawData: r.rawData, serialNo: r.serialNo })));
+    setStatus(`🖨️  預覽列印 — ${sorted.length} 份（序號${asc ? "由小到大" : "由大到小"}）`);
+  };
+
   const btn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
-    background: C.bgPanel, color: C.textMain, border: `1px solid ${C.border}`,
+    background: "#F1F5F9", color: C.textMain, border: `1px solid ${C.border}`,
     borderRadius: 6, padding: "6px 14px", cursor: "pointer",
     fontFamily: "Microsoft JhengHei UI, sans-serif", fontSize: 13,
     transition: "background 0.15s",
     ...extra,
   });
   const btnAccent: React.CSSProperties = { ...btn(), background: C.accent, color: C.textHead, fontWeight: "bold" };
+  const btnTool = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+    background: "rgba(255,255,255,0.12)", color: "#FFFFFF",
+    border: "1px solid rgba(255,255,255,0.25)",
+    borderRadius: 6, padding: "6px 14px", cursor: "pointer",
+    fontFamily: "Microsoft JhengHei UI, sans-serif", fontSize: 13,
+    transition: "background 0.15s", ...extra,
+  });
+  const btnToolAccent: React.CSSProperties = {
+    ...btnTool(), background: "#2563EB", border: "1px solid #1D4ED8", fontWeight: "bold",
+  };
 
   // ── 渲染 ─────────────────────────────────────────────────────────────────
   return (
+    <>
     <div style={{ display: "flex", flexDirection: "column", height: "100vh",
                   background: C.bgDark, color: C.textMain,
                   fontFamily: "Microsoft JhengHei UI, sans-serif", fontSize: 13 }}>
 
       {/* ── 工具列 ────────────────────────────────────────────────────────── */}
-      <div style={{ background: C.bgPanel, padding: "8px 16px",
+      <div style={{ background: C.bgToolbar, padding: "8px 16px",
                     display: "flex", alignItems: "center", gap: 8,
                     borderBottom: `1px solid ${C.border}` }}>
         <span style={{ fontSize: 18, marginRight: 4 }}>🏥</span>
@@ -368,14 +401,14 @@ export default function ReportApp() {
         <input ref={templateInputRef} type="file" accept=".docx" style={{ display: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) { setTemplateFile(f); setStatus(`範本：${f.name}`); } e.target.value = ""; }} />
 
-        <button style={btn()} onClick={() => excelInputRef.current?.click()}>📂 匯入 Excel</button>
-        <button style={btn({ color: C.accent2 })} onClick={() => mappingInputRef.current?.click()}>🔢 序號對照表</button>
-        <button style={btn()} onClick={() => templateInputRef.current?.click()}>📋 選擇範本</button>
-        <button style={btn()} onClick={showAll}>👁 全部個案</button>
-        <button style={btn({ color: C.warn })} onClick={showMetabolic}>⚠️ 代謝症候群</button>
+        <button style={btnTool()} onClick={() => excelInputRef.current?.click()}>📂 匯入 Excel</button>
+        <button style={btnTool({ color: "#67E8F9" })} onClick={() => mappingInputRef.current?.click()}>🔢 序號對照表</button>
+        <button style={btnTool()} onClick={() => templateInputRef.current?.click()}>📋 選擇範本</button>
+        <button style={btnTool()} onClick={showAll}>👁 全部個案</button>
+        <button style={btnTool({ color: "#FDE68A" })} onClick={showMetabolic}>⚠️ 代謝症候群</button>
         <div style={{ position: "relative" }}>
           <button
-            style={btn({ color: C.accent2 })}
+            style={btnTool({ color: "#67E8F9" })}
             onClick={() => setShowHepMenu(v => !v)}
             onBlur={() => setTimeout(() => setShowHepMenu(false), 150)}
           >
@@ -384,9 +417,9 @@ export default function ReportApp() {
           {showHepMenu && (
             <div style={{
               position: "absolute", top: "calc(100% + 4px)", left: 0,
-              background: C.bgPanel, border: `1px solid ${C.border}`,
+              background: "#FFFFFF", border: `1px solid ${C.border}`,
               borderRadius: 6, zIndex: 200, minWidth: 140,
-              boxShadow: "0 4px 16px rgba(0,0,0,0.5)", overflow: "hidden",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.25)", overflow: "hidden",
             }}>
               <button
                 style={{ ...btn(), width: "100%", textAlign: "left", borderRadius: 0,
@@ -402,10 +435,35 @@ export default function ReportApp() {
           )}
         </div>
         <div style={{ flex: 1 }} />
-        <button style={btn()} onClick={handleGenerateSelected} disabled={generating}>
-          ✔ 產生選取
-        </button>
-        <button style={btnAccent} onClick={handleGenerateAll} disabled={generating}>
+        <div style={{ position: "relative" }}>
+          <button
+            style={btnTool()}
+            onClick={() => setShowPrintMenu(v => !v)}
+            onBlur={() => setTimeout(() => setShowPrintMenu(false), 150)}
+          >
+            🖨️ 列印報告 ▾
+          </button>
+          {showPrintMenu && (
+            <div style={{
+              position: "absolute", top: "calc(100% + 4px)", right: 0,
+              background: "#FFFFFF", border: `1px solid ${C.border}`,
+              borderRadius: 6, zIndex: 200, minWidth: 160,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.25)", overflow: "hidden",
+            }}>
+              <button
+                style={{ ...btn(), width: "100%", textAlign: "left", borderRadius: 0,
+                          borderBottom: `1px solid ${C.border}`, padding: "8px 14px", color: C.textMain }}
+                onMouseDown={() => handlePrint(true)}
+              >序號由小到大列印</button>
+              <button
+                style={{ ...btn(), width: "100%", textAlign: "left",
+                          borderRadius: 0, padding: "8px 14px", color: C.textMain }}
+                onMouseDown={() => handlePrint(false)}
+              >序號由大到小列印</button>
+            </div>
+          )}
+        </div>
+        <button style={btnToolAccent} onClick={handleGenerateAll} disabled={generating}>
           {generating ? `⏳ ${progress.done}/${progress.total}` : "▶ 產生報告"}
         </button>
       </div>
@@ -504,43 +562,6 @@ export default function ReportApp() {
               onClick={() => templateInputRef.current?.click()} accent={C.accent} />
           </SideSection>
 
-          <SideSection title="⚙️ 產生範圍" accent={C.accent} border={C.border}>
-            {(["all", "filtered", "range"] as const).map(val => (
-              <label key={val} style={{ display: "flex", alignItems: "center", gap: 6,
-                                        cursor: "pointer", color: C.textMain }}>
-                <input type="radio" checked={rangeMode === val}
-                  onChange={() => setRangeMode(val)}
-                  style={{ accentColor: C.accent }} />
-                {{ all: "全部個案", filtered: "目前篩選結果", range: "指定範圍" }[val]}
-              </label>
-            ))}
-            {rangeMode === "range" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-                <span style={{ color: C.textDim }}>第</span>
-                <input value={rangeFrom} onChange={e => setRangeFrom(e.target.value)}
-                  style={{ width: 44, background: C.bgRowA, color: C.textMain,
-                            border: `1px solid ${C.border}`, borderRadius: 4,
-                            padding: "2px 4px", textAlign: "center" }} />
-                <span style={{ color: C.textDim }}>至</span>
-                <input value={rangeTo} onChange={e => setRangeTo(e.target.value)}
-                  style={{ width: 44, background: C.bgRowA, color: C.textMain,
-                            border: `1px solid ${C.border}`, borderRadius: 4,
-                            padding: "2px 4px", textAlign: "center" }} />
-                <span style={{ color: C.textDim }}>筆</span>
-              </div>
-            )}
-          </SideSection>
-
-          <SideSection title="🔵 多選操作" accent={C.accent} border={C.border}>
-            <button style={{ ...btn(), width: "100%", textAlign: "left" }}
-              onClick={selectAll}>全選目前頁面</button>
-            <button style={{ ...btn(), width: "100%", textAlign: "left", marginTop: 4 }}
-              onClick={clearSel}>取消選取</button>
-            <div style={{ color: C.accent2, fontSize: 12, marginTop: 4 }}>
-              已選 {selected.size} 筆
-            </div>
-          </SideSection>
-
           <div style={{ flex: 1 }} />
           <div style={{ color: C.textDim, fontSize: 11, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
             版本 v1.0 · 全瀏覽器執行
@@ -580,7 +601,7 @@ export default function ReportApp() {
           <div style={{ flex: 1, overflow: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ background: C.bgPanel, position: "sticky", top: 0, zIndex: 1 }}>
+                <tr style={{ background: C.bgToolbar, position: "sticky", top: 0, zIndex: 1 }}>
                   <th style={{ width: 32, padding: "8px 4px", color: C.accent,
                                 borderBottom: `1px solid ${C.border}` }}>
                     <input type="checkbox"
@@ -590,7 +611,7 @@ export default function ReportApp() {
                   </th>
                   {COLS.map(col => (
                     <th key={col.key}
-                      style={{ padding: "8px 6px", color: C.accent, textAlign: "center",
+                      style={{ padding: "8px 6px", color: C.textHead, textAlign: "center",
                                 borderBottom: `1px solid ${C.border}`, minWidth: col.w,
                                 cursor: col.key !== "msItems" ? "pointer" : "default",
                                 userSelect: "none" }}
@@ -651,13 +672,23 @@ export default function ReportApp() {
       </div>
 
       {/* ── 狀態列 ────────────────────────────────────────────────────────── */}
-      <div style={{ background: C.bgPanel, borderTop: `1px solid ${C.border}`,
+      <div style={{ background: C.bgToolbar, borderTop: `1px solid ${C.border}`,
                     padding: "4px 16px", display: "flex", justifyContent: "space-between",
                     alignItems: "center", fontSize: 12 }}>
-        <span style={{ color: C.textDim }}>{status}</span>
-        <span style={{ color: C.border }}>成人健檢報告產生程式 v1.0</span>
+        <span style={{ color: "#94A3B8" }}>{status}</span>
+        <span style={{ color: "#475569" }}>成人健檢報告產生程式 v1.0</span>
       </div>
     </div>
+
+    {/* 預覽列印 Modal */}
+    {printRecords && (
+      <PrintPreviewModal
+        records={printRecords}
+        templateFile={templateFile}
+        onClose={() => setPrintRecords(null)}
+      />
+    )}
+    </>
   );
 }
 
@@ -680,7 +711,7 @@ function FilePathRow({
   return (
     <div style={{ marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-        <span style={{ color: "#8A94B0", fontSize: 11 }}>{label}</span>
+        <span style={{ color: C.textDim, fontSize: 11 }}>{label}</span>
         {badge && (
           <span style={{ background: accent + "33", color: accent, fontSize: 10,
                           borderRadius: 4, padding: "1px 5px", fontWeight: "bold" }}>
@@ -689,16 +720,97 @@ function FilePathRow({
         )}
       </div>
       <div style={{ display: "flex", gap: 4 }}>
-        <div style={{ flex: 1, background: "#2A3147", border: `1px solid ${name ? accent + "66" : "#353D52"}`,
+        <div style={{ flex: 1, background: "#F8FAFC", border: `1px solid ${name ? accent + "88" : "#CBD5E1"}`,
                       borderRadius: 4, padding: "3px 6px", fontSize: 11,
-                      color: name ? "#E8EAF0" : "#8A94B0",
+                      color: name ? "#1E293B" : "#94A3B8",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {name ?? "（未選擇）"}
         </div>
         <button onClick={onClick}
-          style={{ background: "#353D52", color: "#E8EAF0", border: "none",
+          style={{ background: "#E2E8F0", color: "#1E293B", border: "1px solid #CBD5E1",
                     borderRadius: 4, padding: "3px 8px", cursor: "pointer",
                     fontSize: 13 }}>…</button>
+      </div>
+    </div>
+  );
+}
+
+// ── 預覽列印 Modal ─────────────────────────────────────────────────────────────────
+function PrintPreviewModal({
+  records, templateFile, onClose,
+}: {
+  records: { rawData: RowData; serialNo: string }[];
+  templateFile: File | null;
+  onClose: () => void;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!templateFile) return;
+    setLoaded(false); setError(null);
+    (async () => {
+      try {
+        const templateBuf = await templateFile.arrayBuffer();
+        const htmlParts: string[] = [];
+        for (const rec of records) {
+          const blob = await fillReport(templateBuf, rec.rawData);
+          const arrayBuf = await blob.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuf });
+          htmlParts.push(result.value);
+        }
+        const css = [
+          '@page{size:A4 portrait;margin:10mm 12mm;}',
+          '*{box-sizing:border-box;}',
+          'body{font-family:"標楷體","DFKai-SB",serif;margin:0;padding:16px;font-size:10pt;background:#888;}',
+          '.page{page-break-after:always;background:#fff;width:210mm;min-height:297mm;margin:0 auto 24px;padding:10mm 12mm;box-shadow:0 2px 10px rgba(0,0,0,0.35);}',
+          '.page:last-child{page-break-after:auto;margin-bottom:0;}',
+          '@media print{body{background:none;margin:0;padding:0;}.page{box-shadow:none;margin:0;padding:0;width:auto;min-height:auto;}}',
+          'table{width:100%;border-collapse:collapse;}',
+          'td,th{border:1px solid #000;padding:2px 4px;font-size:9pt;}',
+          'p{margin:0;padding:0;}',
+        ].join('');
+        const body = htmlParts.map(h => '<div class="page">' + h + '</div>').join('');
+        const combined = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + css + '</style></head><body>' + body + '</body></html>';
+        const iframe = iframeRef.current;
+        if (!iframe) return;
+        const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!iDoc) return;
+        iDoc.open(); iDoc.write(combined); iDoc.close();
+        setLoaded(true);
+      } catch (e) {
+        setError('產生預覽失敗：' + String(e));
+      }
+    })();
+  }, [records, templateFile]);
+
+  const doPrint = () => {
+    iframeRef.current?.contentWindow?.focus();
+    iframeRef.current?.contentWindow?.print();
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "rgba(15,23,42,0.85)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "#1E3A6E", boxShadow: "0 2px 8px rgba(0,0,0,0.4)", flexShrink: 0 }}>
+        <span style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>🖨️ 預覽列印 — {records.length} 份報告</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={doPrint} disabled={!loaded} style={{ background: loaded ? "#2563EB" : "#64748B", color: "#fff", border: "none", borderRadius: 6, padding: "8px 24px", cursor: loaded ? "pointer" : "not-allowed", fontWeight: "bold", fontSize: 14, fontFamily: "Microsoft JhengHei UI, sans-serif" }}>
+          {loaded ? "🖨️ 列印" : "⏳ 載入中..."}
+        </button>
+        <button onClick={onClose} style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 14, fontFamily: "Microsoft JhengHei UI, sans-serif" }}>✕ 關閉</button>
+      </div>
+      <div style={{ textAlign: "center", fontSize: 12, padding: "6px 0", background: "#0F172A", flexShrink: 0, color: error ? "#F87171" : "#94A3B8" }}>
+        {error ?? `共 ${records.length} 頁 · 每頁一份報告 · A4 直向`}
+      </div>
+      <div style={{ flex: 1, overflow: "auto", padding: "16px", background: "#1E293B" }}>
+        <iframe ref={iframeRef} style={{ width: "100%", minHeight: `${records.length * 330}mm`, border: "none", display: "block", background: "#888" }} title="列印預覽" />
       </div>
     </div>
   );
