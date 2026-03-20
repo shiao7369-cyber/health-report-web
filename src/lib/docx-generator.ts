@@ -238,6 +238,26 @@ export async function fillReport(
     }
   }
 
+  // ── 頁尾下方加一列空白列（無框線）─────────────────────────────────────────
+  const allTables = Array.from(doc.getElementsByTagNameNS(NS, "tbl"));
+  for (const tbl of allTables) {
+    const tblTrs = Array.from(tbl.getElementsByTagNameNS(NS, "tr"));
+    const footerTr = [...tblTrs].reverse().find(tr =>
+      getCellTexts(tr).join("").includes("特約醫事")
+    );
+    if (footerTr) {
+      const emptyTr = footerTr.cloneNode(true) as Element;
+      // 清空文字
+      Array.from(emptyTr.getElementsByTagNameNS(NS, "t"))
+        .forEach(t => { t.textContent = ""; });
+      // 移除所有框線設定（w:tcBorders）讓空白列無框線
+      Array.from(emptyTr.getElementsByTagNameNS(NS, "tcBorders"))
+        .forEach(b => b.parentNode!.removeChild(b));
+      footerTr.parentNode!.appendChild(emptyTr);
+      break;
+    }
+  }
+
   // 序列化回 XML 並存入 ZIP
   const serializer = new XMLSerializer();
   const newXml = serializer.serializeToString(doc);
