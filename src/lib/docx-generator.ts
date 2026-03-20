@@ -238,6 +238,24 @@ export async function fillReport(
     }
   }
 
+  // ── 頁尾下方加一列空白列 ─────────────────────────────────────────────────
+  const allTables = Array.from(doc.getElementsByTagNameNS(NS, "tbl"));
+  for (const tbl of allTables) {
+    const tblTrs = Array.from(tbl.getElementsByTagNameNS(NS, "tr"));
+    // 找含「特約醫事」的最後一列（蓋章列）
+    const footerTr = [...tblTrs].reverse().find(tr =>
+      getCellTexts(tr).join("").includes("特約醫事")
+    );
+    if (footerTr) {
+      // 複製該列結構，清空所有文字，作為空白列附加在後面
+      const emptyTr = footerTr.cloneNode(true) as Element;
+      Array.from(emptyTr.getElementsByTagNameNS(NS, "t"))
+        .forEach(t => { t.textContent = ""; });
+      footerTr.parentNode!.appendChild(emptyTr);
+      break;
+    }
+  }
+
   // 序列化回 XML 並存入 ZIP
   const serializer = new XMLSerializer();
   const newXml = serializer.serializeToString(doc);
