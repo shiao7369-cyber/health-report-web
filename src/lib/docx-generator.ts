@@ -268,31 +268,12 @@ export async function fillReport(
     }
   }
 
-  // ── 頁尾後插入空白段落（高度約 1.5 行），完全不涉及表格框線 ────────────────
-  const allTables = Array.from(doc.getElementsByTagNameNS(NS, "tbl"));
-  for (const tbl of allTables) {
-    const tblTrs = Array.from(tbl.getElementsByTagNameNS(NS, "tr"));
-    const hasFooter = tblTrs.some(tr =>
-      getCellTexts(tr).join("").includes("特約醫事")
-    );
-    if (hasFooter) {
-      const paraXml =
-        `<w:p xmlns:w="${NS}">` +
-          `<w:pPr><w:spacing w:before="0" w:after="0"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr>` +
-        `</w:p>`;
-      const paraDoc = new DOMParser().parseFromString(paraXml, "text/xml");
-      const para = doc.adoptNode(paraDoc.documentElement);
-      // 插入到表格的下一個兄弟節點之前（即表格之後）
-      tbl.parentNode!.insertBefore(para, tbl.nextSibling);
-      break;
-    }
-  }
-
-  // ── 縮小頁邊距，讓表格填滿 A5 紙張 ─────────────────────────────────────────
+  // ── 縮小頁邊距並垂直置中，讓上下空白對稱 ───────────────────────────────────
   // 280 twips ≈ 5 mm，上下左右一致
   const MARGIN = "280";
   const sectPrList = Array.from(doc.getElementsByTagNameNS(NS, "sectPr"));
   for (const sectPr of sectPrList) {
+    // 頁邊距四邊均設為 5mm
     const pgMarList = Array.from(sectPr.getElementsByTagNameNS(NS, "pgMar"));
     for (const pgMar of pgMarList) {
       pgMar.setAttributeNS(NS, "w:top",    MARGIN);
@@ -302,6 +283,13 @@ export async function fillReport(
       pgMar.setAttributeNS(NS, "w:header", MARGIN);
       pgMar.setAttributeNS(NS, "w:footer", MARGIN);
     }
+    // 內容垂直置中，使上下空白自動對稱
+    let vAlign = sectPr.getElementsByTagNameNS(NS, "vAlign")[0];
+    if (!vAlign) {
+      vAlign = doc.createElementNS(NS, "w:vAlign");
+      sectPr.appendChild(vAlign);
+    }
+    vAlign.setAttributeNS(NS, "w:val", "center");
   }
 
   // ── 主表格寬度設為 100% 填滿內文區域 ────────────────────────────────────────
