@@ -254,7 +254,7 @@ export async function fillReport(
     if (hasFooter) {
       const paraXml =
         `<w:p xmlns:w="${NS}">` +
-          `<w:pPr><w:spacing w:before="0" w:after="360"/></w:pPr>` +
+          `<w:pPr><w:spacing w:before="0" w:after="0"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr>` +
         `</w:p>`;
       const paraDoc = new DOMParser().parseFromString(paraXml, "text/xml");
       const para = doc.adoptNode(paraDoc.documentElement);

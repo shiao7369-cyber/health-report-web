@@ -791,23 +791,26 @@ function PrintPreviewModal({
           @page{size:A5 landscape;margin:0;}
           *{box-sizing:border-box;}
           body{margin:0;padding:12px;background:#888;}
-          .page{page-break-after:always;background:#fff;width:210mm;min-height:148mm;margin:0 auto 16px;box-shadow:0 2px 10px rgba(0,0,0,0.35);}
-          .page:last-child{page-break-after:auto;margin-bottom:0;}
-          @media print{body{background:none;padding:0;}.page{box-shadow:none;margin:0;width:auto;min-height:auto;}}
+          .docx-wrapper{margin:0 auto 16px !important;box-shadow:0 2px 10px rgba(0,0,0,0.35);display:block !important;}
+          .docx-wrapper:last-child{margin-bottom:0 !important;}
+          .docx-wrapper section.docx{margin:0 auto !important;}
+          @media print{
+            body{background:none;padding:0;}
+            .docx-wrapper{box-shadow:none;margin:0 !important;page-break-after:always;}
+            .docx-wrapper:last-child{page-break-after:auto;}
+          }
         </style></head><body></body></html>`);
         iDoc.close();
         const body = iDoc.body;
         for (const rec of records) {
           const blob = await fillReport(templateBuf, rec.rawData);
           const arrayBuf = await blob.arrayBuffer();
-          const pageDiv = iDoc.createElement("div");
-          pageDiv.className = "page";
-          body.appendChild(pageDiv);
-          await renderAsync(arrayBuf, pageDiv, undefined, {
-            inWrapper: false,
+          const container = iDoc.createElement("div");
+          body.appendChild(container);
+          await renderAsync(arrayBuf, container, undefined, {
+            inWrapper: true,
             ignoreWidth: false,
-            ignoreHeight: false,
-            useMathMLPolyfill: false,
+            ignoreHeight: true,
           });
         }
         setLoaded(true);
