@@ -150,7 +150,16 @@ export default function ReportApp() {
 
   // ── 同時處理多個拖入/選入的 Excel（自動辨別類型）──────────────────────
   const handleDropFiles = useCallback(async (files: FileList | File[]) => {
-    const xlsxList = Array.from(files).filter(f => /\.xlsx?$/i.test(f.name));
+    const allFiles = Array.from(files);
+
+    // ── .docx → 自動設為範本 ──────────────────────────────────────────────
+    const docxFile = allFiles.find(f => /\.docx$/i.test(f.name));
+    if (docxFile) {
+      setTemplateFile(docxFile);
+      setStatus(`範本：${docxFile.name}`);
+    }
+
+    const xlsxList = allFiles.filter(f => /\.xlsx?$/i.test(f.name));
     if (xlsxList.length === 0) return;
 
     setStatus("🔍 自動辨別檔案類型...");
@@ -420,7 +429,7 @@ export default function ReportApp() {
           onChange={e => { const f = e.target.files?.[0]; if (f) handleExcelFile(f); e.target.value = ""; }} />
         <input ref={mappingInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) handleMappingFile(f); e.target.value = ""; }} />
-        <input ref={dropInputRef} type="file" accept=".xlsx,.xls" multiple style={{ display: "none" }}
+        <input ref={dropInputRef} type="file" accept=".xlsx,.xls,.docx" multiple style={{ display: "none" }}
           onChange={e => { if (e.target.files?.length) handleDropFiles(e.target.files); e.target.value = ""; }} />
         <input ref={templateInputRef} type="file" accept=".docx" style={{ display: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) { setTemplateFile(f); setStatus(`範本：${f.name}`); } e.target.value = ""; }} />
@@ -506,7 +515,7 @@ export default function ReportApp() {
                       gap: 8, border: `1px solid ${C.border}`, flexShrink: 0 }}>
 
           <SideSection title="📄 資料來源" accent={C.accent} border={C.border}>
-            {/* ── Drop Zone ── */}
+            {/* ── 統一 Drop Zone（Excel × 2 + .docx 範本）── */}
             <div
               onClick={() => dropInputRef.current?.click()}
               onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
@@ -517,24 +526,29 @@ export default function ReportApp() {
                 if (e.dataTransfer.files.length) handleDropFiles(e.dataTransfer.files);
               }}
               style={{
-                border: `2px dashed ${isDragOver ? C.accent : (excelFile || mappingFile) ? C.accent2 + "88" : C.border}`,
+                border: `2px dashed ${isDragOver ? C.accent : (excelFile || mappingFile || templateFile) ? C.accent2 + "88" : C.border}`,
                 borderRadius: 8,
                 padding: "10px 8px",
                 cursor: "pointer",
                 background: isDragOver ? C.accent + "18" : C.bgRowA,
                 transition: "border-color 0.15s, background 0.15s",
-                marginBottom: 8,
                 textAlign: "center",
               }}>
-              {!excelFile && !mappingFile ? (
+              {!excelFile && !mappingFile && !templateFile ? (
                 /* 空白提示 */
                 <div>
                   <div style={{ fontSize: 22, marginBottom: 4 }}>📂</div>
                   <div style={{ color: C.accent, fontSize: 12, fontWeight: "bold", marginBottom: 2 }}>
-                    拖曳 Excel 至此
+                    拖曳檔案至此
+                  </div>
+                  <div style={{ color: C.textDim, fontSize: 11, marginBottom: 2 }}>
+                    健檢資料 .xlsx
+                  </div>
+                  <div style={{ color: C.textDim, fontSize: 11, marginBottom: 2 }}>
+                    序號對照表 .xlsx
                   </div>
                   <div style={{ color: C.textDim, fontSize: 11, marginBottom: 6 }}>
-                    可同時放入兩個檔案
+                    報告範本 .docx
                   </div>
                   <div style={{ display: "inline-block", background: C.bgPanel,
                                 border: `1px solid ${C.border}`, borderRadius: 4,
@@ -577,6 +591,18 @@ export default function ReportApp() {
                       </div>
                     </div>
                   )}
+                  {templateFile && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                      <span style={{ fontSize: 14 }}>📋</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: C.accent, fontSize: 10, fontWeight: "bold" }}>報告範本</div>
+                        <div style={{ color: C.textMain, fontSize: 11,
+                                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {templateFile.name}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div
                     onClick={() => dropInputRef.current?.click()}
                     style={{ textAlign: "center", marginTop: 4, color: C.textDim,
@@ -587,8 +613,6 @@ export default function ReportApp() {
                 </div>
               )}
             </div>
-            <FilePathRow label="報告範本 (.docx)" name={templateFile?.name}
-              onClick={() => templateInputRef.current?.click()} accent={C.accent} />
           </SideSection>
 
           <div style={{ flex: 1 }} />
