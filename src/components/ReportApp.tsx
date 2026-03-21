@@ -7,7 +7,7 @@ import { parseExcel, parseMappingExcel, detectExcelType } from "../lib/excel-rea
 import type { SerialMapping } from "../lib/excel-reader";
 import { fillReport, makeFilename } from "../lib/docx-generator";
 import JSZip from "jszip";
-import mammoth from "mammoth";
+import { renderAsync } from "docx-preview";
 
 function saveAs(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -71,7 +71,7 @@ export default function ReportApp() {
   const [status,        setStatus]        = useState("尚未載入資料");
   const [generating,    setGenerating]    = useState(false);
   const [progress,      setProgress]      = useState({ done: 0, total: 0 });
-  const [sortKey,       setSortKey]       = useState<SortKey>(null);
+  const [sortKey,       setSortKey]       = useState<SortKey>("serialNo");
   const [sortAsc,       setSortAsc]       = useState(true);
   const [rangeMode,     setRangeMode]     = useState<"all" | "filtered" | "range">("all");
   const [rangeFrom,     setRangeFrom]     = useState("1");
@@ -98,6 +98,10 @@ export default function ReportApp() {
     );
   }, []);
 
+  // 依序號由小到大排序
+  const sortBySerial = (recs: PatientRecord[]) =>
+    [...recs].sort((a, b) => (a.serialNo || "").localeCompare(b.serialNo || "", "zh-TW"));
+
   // ── 匯入健檢 Excel ────────────────────────────────────────────────────
   const handleExcelFile = useCallback(async (file: File, mapping?: SerialMapping | null) => {
     setExcelFile(file);
@@ -106,7 +110,7 @@ export default function ReportApp() {
       const buf = await file.arrayBuffer();
       setExcelBuf(buf);
       const activeMapping = mapping !== undefined ? mapping : serialMapping;
-      const recs = parseExcel(buf, activeMapping ?? undefined);
+      const recs = sortBySerial(parseExcel(buf, activeMapping ?? undefined));
       setRecords(recs);
       const f = applyFilter(searchKw, recs);
       setFiltered(f);
@@ -129,7 +133,7 @@ export default function ReportApp() {
       setSerialMapping(mapping);
       if (excelBuf) {
         // 健檢資料已載入 → 重新合併
-        const recs = parseExcel(excelBuf, mapping);
+        const recs = sortBySerial(parseExcel(excelBuf, mapping));
         setRecords(recs);
         const f = applyFilter(searchKw, recs);
         setFiltered(f);
@@ -174,7 +178,7 @@ export default function ReportApp() {
     const activeHFile = hFile  ?? excelFile;
     if (activeBuf && activeHFile) {
       if (hFile) { setExcelFile(hFile); setExcelBuf(hBuf!); }
-      const recs = parseExcel(activeBuf, activeMapping ?? undefined);
+      const recs = sortBySerial(parseExcel(activeBuf, activeMapping ?? undefined));
       setRecords(recs);
       const f = applyFilter(searchKw, recs);
       setFiltered(f);
@@ -778,32 +782,34 @@ function PrintPreviewModal({
     (async () => {
       try {
         const templateBuf = await templateFile.arrayBuffer();
-        const htmlParts: string[] = [];
-        for (const rec of records) {
-          const blob = await fillReport(templateBuf, rec.rawData);
-          const arrayBuf = await blob.arrayBuffer();
-          const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuf });
-          htmlParts.push(result.value);
-        }
-        const css = [
-          '@page{size:A4 portrait;margin:10mm 12mm;}',
-          '*{box-sizing:border-box;}',
-          'body{font-family:"標楷體","DFKai-SB",serif;margin:0;padding:16px;font-size:10pt;background:#888;}',
-          '.page{page-break-after:always;background:#fff;width:210mm;min-height:297mm;margin:0 auto 24px;padding:10mm 12mm;box-shadow:0 2px 10px rgba(0,0,0,0.35);}',
-          '.page:last-child{page-break-after:auto;margin-bottom:0;}',
-          '@media print{body{background:none;margin:0;padding:0;}.page{box-shadow:none;margin:0;padding:0;width:auto;min-height:auto;}}',
-          'table{width:100%;border-collapse:collapse;}',
-          'td,th{border:1px solid #000;padding:2px 4px;font-size:9pt;min-height:20pt;}',
-          'tr{height:20pt;}',
-          'p{margin:0;padding:0;}',
-        ].join('');
-        const body = htmlParts.map(h => '<div class="page">' + h + '</div>').join('');
-        const combined = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + css + '</style></head><body>' + body + '</body></html>';
         const iframe = iframeRef.current;
         if (!iframe) return;
         const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
         if (!iDoc) return;
-        iDoc.open(); iDoc.write(combined); iDoc.close();
+        iDoc.open();
+        iDoc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+          @page{size:A5 landscape;margin:0;}
+          *{box-sizing:border-box;}
+          body{margin:0;padding:12px;background:#888;}
+          .page{page-break-after:always;background:#fff;width:210mm;min-height:148mm;margin:0 auto 16px;box-shadow:0 2px 10px rgba(0,0,0,0.35);}
+          .page:last-child{page-break-after:auto;margin-bottom:0;}
+          @media print{body{background:none;padding:0;}.page{box-shadow:none;margin:0;width:auto;min-height:auto;}}
+        </style></head><body></body></html>`);
+        iDoc.close();
+        const body = iDoc.body;
+        for (const rec of records) {
+          const blob = await fillReport(templateBuf, rec.rawData);
+          const arrayBuf = await blob.arrayBuffer();
+          const pageDiv = iDoc.createElement("div");
+          pageDiv.className = "page";
+          body.appendChild(pageDiv);
+          await renderAsync(arrayBuf, pageDiv, undefined, {
+            inWrapper: false,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            useMathMLPolyfill: false,
+          });
+        }
         setLoaded(true);
       } catch (e) {
         setError('產生預覽失敗：' + String(e));
@@ -833,10 +839,10 @@ function PrintPreviewModal({
         <button onClick={onClose} style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 14, fontFamily: "Microsoft JhengHei UI, sans-serif" }}>✕ 關閉</button>
       </div>
       <div style={{ textAlign: "center", fontSize: 12, padding: "6px 0", background: "#0F172A", flexShrink: 0, color: error ? "#F87171" : "#94A3B8" }}>
-        {error ?? `共 ${records.length} 頁 · 每頁一份報告 · A4 直向`}
+        {error ?? `共 ${records.length} 頁 · 每頁一份報告 · A5 橫向`}
       </div>
       <div style={{ flex: 1, overflow: "auto", padding: "16px", background: "#1E293B" }}>
-        <iframe ref={iframeRef} style={{ width: "100%", minHeight: `${records.length * 330}mm`, border: "none", display: "block", background: "#888" }} title="列印預覽" />
+        <iframe ref={iframeRef} style={{ width: "100%", minHeight: `${records.length * 165}mm`, border: "none", display: "block", background: "#888" }} title="列印預覽" />
       </div>
     </div>
   );
