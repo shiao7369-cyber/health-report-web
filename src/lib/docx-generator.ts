@@ -52,8 +52,8 @@ function clearAndFill(paras: Element[], text: string, sz = "20") {
     fnt.setAttributeNS(NS, "w:eastAsia", "標楷體");
     fnt.setAttributeNS(NS, "w:hAnsi",    "標楷體");
     const szEl = doc.createElementNS(NS, "w:sz");
-    // 框框字元比中文字視覺偏小，加 6 個半點（+3pt）補正
-    szEl.setAttributeNS(NS, "w:val", seg.box ? String(parseInt(sz) + 6) : sz);
+    // 框框字元比中文字視覺偏小，加 12 個半點（+6pt）補正
+    szEl.setAttributeNS(NS, "w:val", seg.box ? String(parseInt(sz) + 12) : sz);
     rPr.appendChild(fnt);
     rPr.appendChild(szEl);
     rEl.appendChild(rPr);
