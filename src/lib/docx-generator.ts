@@ -264,6 +264,37 @@ export async function fillReport(
     }
   }
 
+  // ── 縮小頁邊距，讓表格填滿 A5 紙張 ─────────────────────────────────────────
+  // 280 twips ≈ 5 mm，上下左右一致
+  const MARGIN = "280";
+  const sectPrList = Array.from(doc.getElementsByTagNameNS(NS, "sectPr"));
+  for (const sectPr of sectPrList) {
+    const pgMarList = Array.from(sectPr.getElementsByTagNameNS(NS, "pgMar"));
+    for (const pgMar of pgMarList) {
+      pgMar.setAttributeNS(NS, "w:top",    MARGIN);
+      pgMar.setAttributeNS(NS, "w:right",  MARGIN);
+      pgMar.setAttributeNS(NS, "w:bottom", MARGIN);
+      pgMar.setAttributeNS(NS, "w:left",   MARGIN);
+      pgMar.setAttributeNS(NS, "w:header", MARGIN);
+      pgMar.setAttributeNS(NS, "w:footer", MARGIN);
+    }
+  }
+
+  // ── 主表格寬度設為 100% 填滿內文區域 ────────────────────────────────────────
+  const tblList = Array.from(doc.getElementsByTagNameNS(NS, "tbl"));
+  if (tblList.length > 0) {
+    const mainTbl = tblList[0];
+    const tblPr = mainTbl.getElementsByTagNameNS(NS, "tblPr")[0];
+    if (tblPr) {
+      const tblWList = Array.from(tblPr.getElementsByTagNameNS(NS, "tblW"));
+      for (const tblW of tblWList) {
+        // A5 橫向 - 左右各 280 twips 邊距 → 內文寬 = 11906 - 560 = 11346 twips
+        tblW.setAttributeNS(NS, "w:w",    "11346");
+        tblW.setAttributeNS(NS, "w:type", "dxa");
+      }
+    }
+  }
+
   // 序列化回 XML 並存入 ZIP
   const serializer = new XMLSerializer();
   const newXml = serializer.serializeToString(doc);
