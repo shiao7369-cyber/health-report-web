@@ -236,22 +236,26 @@ export async function fillReport(
 
     // ── B 型肝炎 ─────────────────────────────────────────────────────────────
     if (joined.includes("B型肝炎表面抗原")) {
-      fillTextNode(tr, "B型肝炎表面抗原", buildHbsagLine(rowData));
+      replaceCellText(tr, "B型肝炎表面抗原", buildHbsagLine(rowData));
       continue;
     }
 
     // ── C 型肝炎 ─────────────────────────────────────────────────────────────
     if (joined.includes("C型肝炎抗體")) {
-      fillTextNode(tr, "C型肝炎抗體", buildHcvLine(rowData));
+      replaceCellText(tr, "C型肝炎抗體", buildHcvLine(rowData));
       continue;
     }
 
-    // ── 咳嗽症狀（還原範本預設）────────────────────────────────────────────
+    // ── 咳嗽症狀（還原範本預設，走 clearAndFill 套用框框加大）──────────────
     if (joined.includes("咳嗽症狀：")) {
-      const tNodes = Array.from(tr.getElementsByTagNameNS(NS, "t"));
-      for (const t of tNodes) {
-        if ((t.textContent ?? "").includes("咳嗽症狀：")) {
-          t.textContent = (t.textContent ?? "").replace("☑", "□");
+      const tcs = Array.from(tr.getElementsByTagNameNS(NS, "tc"));
+      for (const tc of tcs) {
+        const tcText = allText(tc);
+        if (tcText.includes("咳嗽症狀：")) {
+          const newText = tcText.replace(/☑/g, "□");
+          const paras = Array.from(tc.getElementsByTagNameNS(NS, "p"));
+          clearAndFill(paras, newText);
+          break;
         }
       }
       continue;
@@ -259,7 +263,7 @@ export async function fillReport(
 
     // ── 憂鬱檢測 ────────────────────────────────────────────────────────────
     if (joined.includes("憂鬱檢測：")) {
-      fillTextNode(tr, "憂鬱檢測：", buildDepressionLine(rowData));
+      replaceCellText(tr, "憂鬱檢測：", buildDepressionLine(rowData));
       continue;
     }
   }
