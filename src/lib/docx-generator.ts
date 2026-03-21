@@ -268,12 +268,10 @@ export async function fillReport(
     }
   }
 
-  // ── 縮小頁邊距並垂直置中，讓上下空白對稱 ───────────────────────────────────
-  // 280 twips ≈ 5 mm，上下左右一致
-  const MARGIN = "280";
+  // ── 縮小頁邊距，四邊均為 5mm ─────────────────────────────────────────────────
+  const MARGIN = "280"; // 280 twips ≈ 5 mm
   const sectPrList = Array.from(doc.getElementsByTagNameNS(NS, "sectPr"));
   for (const sectPr of sectPrList) {
-    // 頁邊距四邊均設為 5mm
     const pgMarList = Array.from(sectPr.getElementsByTagNameNS(NS, "pgMar"));
     for (const pgMar of pgMarList) {
       pgMar.setAttributeNS(NS, "w:top",    MARGIN);
@@ -283,13 +281,41 @@ export async function fillReport(
       pgMar.setAttributeNS(NS, "w:header", MARGIN);
       pgMar.setAttributeNS(NS, "w:footer", MARGIN);
     }
-    // 內容垂直置中，使上下空白自動對稱
-    let vAlign = sectPr.getElementsByTagNameNS(NS, "vAlign")[0];
-    if (!vAlign) {
-      vAlign = doc.createElementNS(NS, "w:vAlign");
-      sectPr.appendChild(vAlign);
+  }
+
+  // ── 消除 body 層級的尾端段落高度（Word 強制保留，但會造成底部多餘空白）────────
+  const bodyEl = doc.getElementsByTagNameNS(NS, "body")[0];
+  if (bodyEl) {
+    for (const node of Array.from(bodyEl.childNodes)) {
+      const el = node as Element;
+      if (el.namespaceURI === NS && el.localName === "p") {
+        // 找到或建立 w:pPr
+        let pPr = el.getElementsByTagNameNS(NS, "pPr")[0];
+        if (!pPr) {
+          pPr = doc.createElementNS(NS, "w:pPr");
+          el.insertBefore(pPr, el.firstChild);
+        }
+        // 行距與段落間距設為絕對最小值
+        let spacing = pPr.getElementsByTagNameNS(NS, "spacing")[0];
+        if (!spacing) {
+          spacing = doc.createElementNS(NS, "w:spacing");
+          pPr.appendChild(spacing);
+        }
+        spacing.setAttributeNS(NS, "w:before",   "0");
+        spacing.setAttributeNS(NS, "w:after",    "0");
+        spacing.setAttributeNS(NS, "w:line",     "1");
+        spacing.setAttributeNS(NS, "w:lineRule", "exact");
+        // 字型大小設為 1（最小），確保行高趨近於零
+        let pRpr = pPr.getElementsByTagNameNS(NS, "rPr")[0];
+        if (!pRpr) {
+          pRpr = doc.createElementNS(NS, "w:rPr");
+          pPr.appendChild(pRpr);
+        }
+        let pSz = pRpr.getElementsByTagNameNS(NS, "sz")[0];
+        if (!pSz) { pSz = doc.createElementNS(NS, "w:sz"); pRpr.appendChild(pSz); }
+        pSz.setAttributeNS(NS, "w:val", "1");
+      }
     }
-    vAlign.setAttributeNS(NS, "w:val", "center");
   }
 
   // ── 主表格寬度設為 100% 填滿內文區域 ────────────────────────────────────────
