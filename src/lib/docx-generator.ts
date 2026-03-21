@@ -31,24 +31,44 @@ function clearAndFill(paras: Element[], text: string, sz = "20") {
   if (paras.length === 0) return;
   const p = paras[0];
   const doc = p.ownerDocument!;
-  const r = doc.createElementNS(NS, "w:r");
-  const rpr = doc.createElementNS(NS, "w:rPr");
-  const fonts = doc.createElementNS(NS, "w:rFonts");
-  fonts.setAttributeNS(NS, "w:ascii",    "標楷體");
-  fonts.setAttributeNS(NS, "w:eastAsia", "標楷體");
-  fonts.setAttributeNS(NS, "w:hAnsi",    "標楷體");
-  const szEl = doc.createElementNS(NS, "w:sz");
-  szEl.setAttributeNS(NS, "w:val", sz);
-  rpr.appendChild(fonts);
-  rpr.appendChild(szEl);
-  r.appendChild(rpr);
-  const t = doc.createElementNS(NS, "w:t");
-  t.textContent = text;
-  if (text && (text[0] === " " || text[text.length - 1] === " ")) {
-    t.setAttribute("xml:space", "preserve");
+
+  // □/■ 在標楷體中字型偏小，需分段並加大字型來補正
+  type Seg = { text: string; box: boolean };
+  const segs: Seg[] = [];
+  for (const ch of text) {
+    const box = ch === "□" || ch === "■";
+    if (segs.length && segs[segs.length - 1].box === box) {
+      segs[segs.length - 1].text += ch;
+    } else {
+      segs.push({ text: ch, box });
+    }
   }
-  r.appendChild(t);
-  p.appendChild(r);
+
+  function makeRun(seg: Seg): Element {
+    const rEl = doc.createElementNS(NS, "w:r");
+    const rPr = doc.createElementNS(NS, "w:rPr");
+    const fnt = doc.createElementNS(NS, "w:rFonts");
+    fnt.setAttributeNS(NS, "w:ascii",    "標楷體");
+    fnt.setAttributeNS(NS, "w:eastAsia", "標楷體");
+    fnt.setAttributeNS(NS, "w:hAnsi",    "標楷體");
+    const szEl = doc.createElementNS(NS, "w:sz");
+    // 框框字元比中文字視覺偏小，加 6 個半點（+3pt）補正
+    szEl.setAttributeNS(NS, "w:val", seg.box ? String(parseInt(sz) + 6) : sz);
+    rPr.appendChild(fnt);
+    rPr.appendChild(szEl);
+    rEl.appendChild(rPr);
+    const tEl = doc.createElementNS(NS, "w:t");
+    tEl.textContent = seg.text;
+    if (seg.text && (seg.text[0] === " " || seg.text[seg.text.length - 1] === " ")) {
+      tEl.setAttribute("xml:space", "preserve");
+    }
+    rEl.appendChild(tEl);
+    return rEl;
+  }
+
+  for (const seg of segs) {
+    p.appendChild(makeRun(seg));
+  }
 }
 
 /** 找到含 keyword 的儲存格，清空並填入新文字；newText 為 null 時跳過（保留範本原樣） */
