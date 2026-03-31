@@ -95,10 +95,12 @@ function isEmpty(s: string): boolean {
 export function classifyBP(sbp: string, dbp: string): "normal" | "elevated" | "stage1" | "stage2" {
   const s = toFloat(sbp);
   const d = toFloat(dbp);
-  if (s === null || d === null) return "normal";
-  if (s >= 140 || d >= 90) return "stage2";
-  if (s >= 130 || d >= 80) return "stage1";
-  if (s >= 120 && s <= 129 && d < 80) return "elevated";
+  if (s === null && d === null) return "normal";
+  const ss = s ?? 0;
+  const dd = d ?? 0;
+  if (ss >= 140 || dd >= 90) return "stage2";
+  if (ss >= 130 || dd >= 80) return "stage1";
+  if (ss >= 120) return "elevated";
   return "normal";
 }
 
@@ -244,7 +246,7 @@ export function buildBpLine(row: RowData): string | null {
   const grade = classifyBP(sbp, dbp);
   switch (grade) {
     case "normal":   return "血  壓：■正常□異常：建議□生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
-    case "elevated": return "血  壓：□正常■異常：建議■生活型態改善，並定期＿＿個月追蹤□進一步檢查□接受治療";
+    case "elevated": return "血  壓：□正常■異常：建議■生活型態改善，並定期６個月追蹤□進一步檢查□接受治療";
     case "stage1":   return "血  壓：□正常■異常：建議■生活型態改善，並定期３個月追蹤□進一步檢查□接受治療";
     case "stage2":   return "血  壓：□正常■異常：建議□生活型態改善，並定期＿＿個月追蹤■進一步檢查■接受治療";
   }
@@ -358,9 +360,19 @@ export function buildHbsagLine(row: RowData): string {
 
 export function buildHcvLine(row: RowData): string {
   const val = v(row, "hcv");
-  const neg = val === "陰性" ? "■" : "□";
-  const pos = val === "陽性" ? "■" : "□";
-  return `"△"C型肝炎抗體        ：${neg}陰性        ${pos}陽性        □進一步檢查        □接受治療`;
+  if (val === "陰性") {
+    return '"△"C型肝炎抗體        ：■陰性        □陽性        □進一步檢查        □接受治療';
+  }
+  if (val === "陽性") {
+    const gotV = toFloat(v(row, "got")) ?? 0;
+    const gptV = toFloat(v(row, "gpt")) ?? 0;
+    const liverSevere = gotV > 80 || gptV > 80;
+    if (liverSevere) {
+      return '"△"C型肝炎抗體        ：□陰性        ■陽性        ■進一步檢查        ■接受治療';
+    }
+    return '"△"C型肝炎抗體        ：□陰性        ■陽性        ■進一步檢查        □接受治療';
+  }
+  return '"△"C型肝炎抗體        ：□陰性        □陽性        □進一步檢查        □接受治療';
 }
 
 export function buildDepressionLine(row: RowData): string | null {
