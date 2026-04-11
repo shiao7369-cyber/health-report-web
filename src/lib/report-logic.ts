@@ -153,7 +153,7 @@ export function classifyLiver(
 
 export function hasProteinuria(urineProtein: string): boolean {
   const val = String(urineProtein).trim();
-  return !["−", "-", "", "None", "陰性"].includes(val);
+  return !["−", "-", "", "None", "陰性", "+/-", "±", "+/−", "+-"].includes(val);
 }
 
 export function classifyKidney(
