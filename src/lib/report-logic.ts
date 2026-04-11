@@ -125,7 +125,7 @@ export function classifyLipid(
   if (ldlV !== null && ldlV >= 160) return "high";
   if (tg !== null && tg >= 200) return "high";
   if (tc !== null && tc >= 200) return "mild";
-  if (ldlV !== null && ldlV >= 130) return "mild";
+  if (ldlV !== null && ldlV >= 100) return "mild";
   if (tg !== null && tg >= 150) return "mild";
   if (hdlV !== null) {
     if (gender === "男" && hdlV < 40) return "mild";
@@ -145,7 +145,8 @@ export function classifyLiver(
   // B/C 肝帶原者：無論肝指數高低，都建議進一步檢查
   if (hasHep) return mx > 200 ? "severe" : "high";
 
-  if (mx <= 40) return "normal";
+  // GOT 正常 ≤34, GPT 正常 ≤45（依檢驗參考值）
+  if (g <= 34 && gp <= 45) return "normal";
   if (mx > 200) return "severe";
   if (mx > 80) return "high";
   return "mild";
