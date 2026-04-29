@@ -150,11 +150,10 @@ export async function fillReport(
       continue;
     }
     if (joined.includes("代謝症候群定義")) {
-      // 保留原文字但統一字型大小為 10pt
       const tcs = Array.from(tr.getElementsByTagNameNS(NS, "tc"));
       for (const tc of tcs) {
         if (allText(tc).includes("代謝症候群定義")) {
-          const text = allText(tc);
+          const text = "（代謝症候群定義：腰圍、血壓、空腹血糖、三酸甘油脂、高密度脂蛋白膽固醇，其中三項或超過三項異常）";
           const paras = Array.from(tc.getElementsByTagNameNS(NS, "p"));
           clearAndFill(paras, text);
           break;

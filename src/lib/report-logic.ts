@@ -109,7 +109,7 @@ export function classifyGlucose(glucose: string): "normal" | "prediab" | "suspec
   if (g === null) return "normal";
   if (g >= 200) return "high";
   if (g >= 126) return "suspect";
-  if (g >= 100) return "prediab";
+  if (g > 100) return "prediab";
   return "normal";
 }
 
@@ -127,10 +127,7 @@ export function classifyLipid(
   if (tc !== null && tc >= 200) return "mild";
   if (ldlV !== null && ldlV >= 100) return "mild";
   if (tg !== null && tg >= 150) return "mild";
-  if (hdlV !== null) {
-    if (gender === "男" && hdlV < 40) return "mild";
-    if (gender === "女" && hdlV < 50) return "mild";
-  }
+  if (hdlV !== null && hdlV < 40) return "mild";
   return "normal";
 }
 
@@ -153,8 +150,17 @@ export function classifyLiver(
 }
 
 export function hasProteinuria(urineProtein: string): boolean {
-  const val = String(urineProtein).trim();
-  return !["−", "-", "", "None", "陰性", "+/-", "±", "+/−", "+-"].includes(val);
+  // 正常範圍：陰性 (-)、微量 (+/-, ±, trace) → 不視為蛋白尿
+  // 半形化、移除所有空白/全形空白後再比對
+  const norm = String(urineProtein)
+    .replace(/[\s　]/g, "")
+    .replace(/[－–—−]/g, "-")
+    .replace(/／/g, "/")
+    .toLowerCase();
+  if (norm === "") return false;
+  const negatives = ["-", "none", "陰性", "neg", "negative", "正常", "normal",
+                     "+/-", "+-", "±", "trace", "微量"];
+  return !negatives.includes(norm);
 }
 
 export function classifyKidney(
@@ -184,14 +190,13 @@ export function classifyMetabolic(
   if (s >= 130 || d >= 85) abnormal.push("bp");
 
   const g = toFloat(glucose);
-  if (g !== null && g >= 100) abnormal.push("glucose");
+  if (g !== null && g > 100) abnormal.push("glucose");
 
   const tg = toFloat(triglyceride);
   if (tg !== null && tg >= 150) abnormal.push("tg");
 
   const hdlV = toFloat(hdl);
-  if (hdlV !== null && ((gender === "男" && hdlV < 40) || (gender === "女" && hdlV < 50)))
-    abnormal.push("hdl");
+  if (hdlV !== null && hdlV < 40) abnormal.push("hdl");
 
   const count = abnormal.length;
   if (count < 3) return "normal";
