@@ -381,14 +381,8 @@ export function buildHcvLine(row: RowData): string {
   return '"△"C型肝炎抗體        ：□陰性        □陽性        □進一步檢查        □接受治療';
 }
 
-export function buildDepressionLine(row: RowData): string | null {
-  const d1 = v(row, "depression1");
-  const d2 = v(row, "depression2");
-  if (isEmpty(d1) && isEmpty(d2)) return null; // 未填寫，保留範本原樣
-  const bothNo = d1 === "否" && d2 === "否";
-  const n = bothNo ? "■" : "□";
-  const y = bothNo ? "□" : "■";
-  return `憂鬱檢測：${n}二題皆答「否」${y}二題任一題答「是」，建議轉介至相關單位接受進一步服務`;
+export function buildDepressionLine(_row: RowData): string | null {
+  return `憂鬱檢測：□二題皆答「否」□二題任一題答「是」，建議轉介至相關單位接受進一步服務`;
 }
 
 export function buildRiskLine(row: RowData): { line1: string; line2: string } {
