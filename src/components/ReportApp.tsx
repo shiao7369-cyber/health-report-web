@@ -80,6 +80,7 @@ export default function ReportApp() {
   const [isDragOver,    setIsDragOver]    = useState(false);
   const [showPrintMenu, setShowPrintMenu] = useState(false);
   const [printRecords,  setPrintRecords]  = useState<{ rawData: RowData; serialNo: string }[] | null>(null);
+  const [printDoubled,  setPrintDoubled]  = useState(false);
 
   const excelInputRef    = useRef<HTMLInputElement>(null);
   const mappingInputRef  = useRef<HTMLInputElement>(null);
@@ -365,6 +366,7 @@ export default function ReportApp() {
       const bv = b.serialNo || "";
       return asc ? av.localeCompare(bv, "zh-TW") : bv.localeCompare(av, "zh-TW");
     });
+    setPrintDoubled(false);
     setPrintRecords(sorted.map(r => ({ rawData: r.rawData, serialNo: r.serialNo })));
     setStatus(`🖨️  預覽列印 — ${sorted.length} 份（序號${asc ? "由小到大" : "由大到小"}）`);
   };
@@ -385,6 +387,7 @@ export default function ReportApp() {
       { rawData: r.rawData, serialNo: r.serialNo },
       { rawData: r.rawData, serialNo: r.serialNo },
     ]);
+    setPrintDoubled(true);
     setPrintRecords(doubled);
     setStatus(`🖨️  預覽列印（多重）— ${sorted.length} 份 × 2 = ${doubled.length} 頁`);
   };
@@ -738,6 +741,7 @@ export default function ReportApp() {
       <PrintPreviewModal
         records={printRecords}
         templateFile={templateFile}
+        doubled={printDoubled}
         onClose={() => setPrintRecords(null)}
       />
     )}
@@ -790,10 +794,11 @@ function FilePathRow({
 
 // ── 預覽列印 Modal ─────────────────────────────────────────────────────────────────
 function PrintPreviewModal({
-  records, templateFile, onClose,
+  records, templateFile, doubled = false, onClose,
 }: {
   records: { rawData: RowData; serialNo: string }[];
   templateFile: File | null;
+  doubled?: boolean;
   onClose: () => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -858,15 +863,19 @@ function PrintPreviewModal({
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "rgba(15,23,42,0.85)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "#1E3A6E", boxShadow: "0 2px 8px rgba(0,0,0,0.4)", flexShrink: 0 }}>
-        <span style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>🖨️ 預覽列印 — {records.length} 份報告</span>
+        <span style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}>
+          🖨️ 預覽列印 — {doubled ? `${records.length / 2} 人 × 2 份 = ${records.length} 頁` : `${records.length} 份報告`}
+        </span>
         <div style={{ flex: 1 }} />
         <button onClick={doPrint} disabled={!loaded} style={{ background: loaded ? "#2563EB" : "#64748B", color: "#fff", border: "none", borderRadius: 6, padding: "8px 24px", cursor: loaded ? "pointer" : "not-allowed", fontWeight: "bold", fontSize: 14, fontFamily: "Microsoft JhengHei UI, sans-serif" }}>
           {loaded ? "🖨️ 列印" : "⏳ 載入中..."}
         </button>
         <button onClick={onClose} style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 14, fontFamily: "Microsoft JhengHei UI, sans-serif" }}>✕ 關閉</button>
       </div>
-      <div style={{ textAlign: "center", fontSize: 12, padding: "6px 0", background: "#0F172A", flexShrink: 0, color: error ? "#F87171" : "#94A3B8" }}>
-        {error ?? `共 ${records.length} 頁 · 每頁一份報告 · A5 橫向`}
+      <div style={{ textAlign: "center", fontSize: 12, padding: "6px 0", background: "#0F172A", flexShrink: 0, color: error ? "#F87171" : doubled ? "#FDE68A" : "#94A3B8" }}>
+        {error ?? (doubled
+          ? `⚠️ 已自動每人兩份（順序 1,1,2,2…）· 印表機「份數」請設為 1，勿設 2 · A5 橫向`
+          : `共 ${records.length} 頁 · 每頁一份報告 · A5 橫向 · 列印多份請設印表機份數`)}
       </div>
       <div style={{ flex: 1, overflow: "auto", padding: "16px", background: "#1E293B" }}>
         <iframe ref={iframeRef} style={{ width: "100%", minHeight: `${records.length * 165}mm`, border: "none", display: "block", background: "#888" }} title="列印預覽" />
