@@ -820,13 +820,16 @@ function PrintPreviewModal({
           @page{size:A5 landscape;margin:0;}
           *{box-sizing:border-box;}
           body{margin:0;padding:12px;background:#888;}
-          .docx-wrapper{margin:0 auto 16px !important;box-shadow:0 2px 10px rgba(0,0,0,0.35);display:block !important;}
-          .docx-wrapper:last-child{margin-bottom:0 !important;}
+          .report-page{margin:0 auto 16px;}
+          .report-page:last-child{margin-bottom:0;}
+          .docx-wrapper{margin:0 auto !important;padding:0 !important;box-shadow:0 2px 10px rgba(0,0,0,0.35);display:block !important;background:#fff;}
           .docx-wrapper section.docx{margin:0 auto !important;}
           @media print{
             body{background:none;padding:0;}
-            .docx-wrapper{box-shadow:none;margin:0 !important;page-break-after:always;}
-            .docx-wrapper:last-child{page-break-after:auto;}
+            .report-page{margin:0 !important;page-break-after:always;break-after:page;}
+            .report-page:last-child{page-break-after:auto;break-after:auto;}
+            .docx-wrapper{box-shadow:none;}
+            .docx-wrapper section.docx{max-height:148mm !important;overflow:hidden;}
           }
         </style></head><body></body></html>`);
         iDoc.close();
@@ -835,6 +838,7 @@ function PrintPreviewModal({
           const blob = await fillReport(templateBuf, rec.rawData);
           const arrayBuf = await blob.arrayBuffer();
           const container = iDoc.createElement("div");
+          container.className = "report-page";
           body.appendChild(container);
           await renderAsync(arrayBuf, container, undefined, {
             inWrapper: true,
