@@ -250,8 +250,8 @@ export default function ReportApp() {
     setSortAsc(newAsc);
     if (!key) return;
     const sorted = [...filtered].sort((a, b) => {
-      const av = (a as Record<string, unknown>)[key] as string ?? "";
-      const bv = (b as Record<string, unknown>)[key] as string ?? "";
+      const av = (a as unknown as Record<string, unknown>)[key] as string ?? "";
+      const bv = (b as unknown as Record<string, unknown>)[key] as string ?? "";
       // 只在字串整體是純數字時才用數值排序，避免 parseFloat("202602-93001") 誤判
       const an = av !== "" && !isNaN(Number(av)) ? Number(av) : NaN;
       const bn = bv !== "" && !isNaN(Number(bv)) ? Number(bv) : NaN;
