@@ -305,6 +305,8 @@ export function buildKidneyLine(row: RowData): string | null {
   }
 
   const grade = classifyKidney(egfr, urineProtein);
+  // 判讀為正常時期別一律顯示「正常」——Excel 可能因微量尿蛋白(+/-)標記「暫時無法判定」，與判讀結果矛盾
+  if (grade === "normal") stageLabel = "正常";
   switch (grade) {
     case "normal": return `腎功能：■正常□異常：期別${stageLabel}建議□生活型態改善，並定期＿個月追蹤□進一步檢查□接受治療`;
     case "stage1": return `腎功能：□正常■異常：期別${stageLabel}建議■生活型態改善，並定期6個月追蹤□進一步檢查□接受治療`;
